@@ -1,0 +1,44 @@
+================================================
+Functional Simulator for RISCV ISA
+================================================
+
+README
+
+Table of contents
+1. Directory Structure
+2. How to build
+3. How to execute
+
+
+
+Directory Structure:
+--------------------
+CS204-Project
+  |
+  |- bin
+      |
+      |- 
+  |- doc
+      |
+      |- design-doc.docx
+  |- include
+      |
+      |- 
+  |- src
+      |- main.py
+      |- Makefile
+      |- myRISCVSim.py
+      |- functions.py
+      |- input_create.py
+  |- test
+      |- sum.mc
+      |- fibonacci.mc
+      |- bsort.mc
+
+How to Run
+------------
+-open terminal
+- navigate to src directory
+- run the program using "python main.py" command
+- you will be asked for the input file
+- give path to input .mc file (eg. ../test/sum.mc)
