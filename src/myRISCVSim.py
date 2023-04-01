@@ -1,4 +1,6 @@
 import functions
+import structures as st
+import threading
 
 """
 The project is developed as part of Computer Architecture class
@@ -58,32 +60,59 @@ RFWrite = False
 branchTargetSelect = 0
 isBranch = 0
 
+isEnd = False
+stall = 0
+
+IF_ID_buff = st.IF_ID_Pipeline_Registers()
+ID_EX_buff = st.ID_EX_Pipeline_Registers()
+EX_MEM_buff = st.EX_MEM_Pipeline_Registers()
+MEM_WB_buff = st.MEM_WB_Pipeline_Registers()
+
+
 def run_riscvsim():
     global PC, clock
-    while(True):
-        fetch()
-        if (isExit):
-            break
-        decode()
-        execute()
-        mem()
-        write_back()
-        
-        if (isBranch == 0):
-            PC = nextPC
-        elif (isBranch == 1):
-            PC = branchTargetAddress
-        else:
-            PC = ALUResult
-        
+
+    while(isExit == False):
+        t1 = threading.Thread(target=fetch1)
+        t2 = threading.Thread(target=decode1)
+        t3 = threading.Thread(target=execute2)
+        t4 = threading.Thread(target=mem2)
+        t5 = threading.Thread(target=write_back2)
+
+        t1.start()
+        t2.start()
+        t3.start()
+        t4.start()
+        t5.start()
+
+        t1.join()
+        t2.join()
+        t3.join()
+        t4.join()
+        t5.join()
+
         clock += 1
         print("clock cycle : ", clock)
+        print("-------------------------------------------------------------------------------------------------\n")
+    
+    swi_exit()
+
+
+    # while(True):
+    #     fetch()
+    #     decode()
+    #     execute()
+    #     mem()
+    #     write_back()
+        
+    #     clock += 1
+    #     print("clock cycle : ", clock)
 
 
 # it is used to set the reset values
 # reset all registers and memory content to 0
 def reset_proc():
-    global X, PC, data_MEM, ins_MEM
+    global X, PC, data_MEM, ins_MEM, IF_ID_buff, ID_EX_buff, EX_MEM_buff, MEM_WB_buff
 
     PC = 0
 
@@ -93,6 +122,13 @@ def reset_proc():
 
     data_MEM = {}
     ins_MEM = {}
+
+    IF_ID_buff = st.IF_ID_Pipeline_Registers()
+    ID_EX_buff = st.ID_EX_Pipeline_Registers()
+    EX_MEM_buff = st.EX_MEM_Pipeline_Registers()
+    MEM_WB_buff = st.MEM_WB_Pipeline_Registers()
+
+
 
 
 # load_program_memory reads the input memory, and pupulates the instruction 
@@ -133,6 +169,53 @@ def fetch():
     print(f"FETCH:Fetch instruction 0x{instruction_word:08x} from address 0x{hex(PC)}")
 
     nextPC = PC + 4
+
+def fetch1():
+    global ins_MEM, PC, instruction_word, isExit, nextPC, IF_ID_buff, isEnd
+
+    if (stall != 0):
+        print("FETCH: stall")
+        return
+
+    if (isEnd):
+        print("FETCH: No Operation")
+        # IF_ID_buff.isEnd = True
+    else:
+        instruction_word = read_word(PC, ins_MEM)
+        print(f"FETCH:Fetch instruction 0x{instruction_word:08x} from address 0x{hex(PC)}")
+    
+        if (instruction_word == int('0xEF000011', 16)):
+            isEnd = True
+            with IF_ID_buff.lock:
+                while not IF_ID_buff.isfree:
+                    IF_ID_buff.lock.wait()
+                    # if (stall != 0):
+                    #     print("FETCH: stall")
+                    #     return
+
+                IF_ID_buff.isfree = False
+
+                IF_ID_buff.isEnd = True
+
+                IF_ID_buff.lock.notify()
+        else:
+            nextPC = PC + 4
+            PC = nextPC
+
+            with IF_ID_buff.lock:
+                while not IF_ID_buff.isfree:
+                    IF_ID_buff.lock.wait()
+                    # if (stall != 0):
+                    #     print("FETCH: stall")
+                    #     return
+
+                IF_ID_buff.isfree = False
+                
+                IF_ID_buff.instruction_word = instruction_word
+                IF_ID_buff.nextPC = nextPC
+
+                IF_ID_buff.lock.notify()
+
     
 
 # reads the instruction register, reads operand1, operand2 from register file, decides the operation to be performed in execute stage
@@ -443,13 +526,322 @@ def decode():
     msg.printMsg()
     
     
+def decode1():
+    global stall, IF_ID_buff, ID_EX_buff, rd, rs1, rs2, op1, op2, operand1, operand2,op2Select, instruction_word, X, MemOp,Mem_b_h_w, operation, resultSelect, RFWrite, immB, immI, immJ, immS, immU, branchTargetSelect, resultSelect, ALUOp, isExit
+
+    if (stall != 0):
+        print("DECODE: stall")
+        stall -= 1
+        return
+    
+    bufferInfo = IF_ID_buff.getInfo()
+
+    if (bufferInfo["isEnd"]):
+        print("DECODE: No Operation")
+        # TODO
+        with ID_EX_buff.lock:
+            while not ID_EX_buff.isfree:
+                ID_EX_buff.lock.wait()
+            ID_EX_buff.isfree = False
+
+            ID_EX_buff.isEnd = True
+
+            ID_EX_buff.lock.notify()
+        return
+
+    instruction_in_binary = bin(bufferInfo["instruction_word"])[2:].zfill(32)
+    opcode = instruction_in_binary[25:32]
+
+    fun7 = instruction_in_binary[0:7]
+    fun3 = instruction_in_binary[17:20]
+
+    rd = int(instruction_in_binary[20:25], 2)
+    rs1 = int(instruction_in_binary[12:17], 2)
+    rs2 = int(instruction_in_binary[7:12], 2)
+
+    if (instruction_in_binary[0] == '1'):
+        immI = int(instruction_in_binary[0:12], 2) - 2**12
+    else:
+        immI = int(instruction_in_binary[0:12], 2)
+
+    imm = instruction_in_binary[0:7] + instruction_in_binary[20:25]
+    if (imm[0] == '1'):
+        immS = int(imm, 2) - 2**12
+    else:
+        immS = int(imm, 2)
+
+    imm = instruction_in_binary[0] + instruction_in_binary[24] + instruction_in_binary[1:7] + instruction_in_binary[20:24] + "0"
+    if (imm[0] == '1'):
+        immB = int(imm, 2) - 2**13
+    else:
+        immB = int(imm, 2)
+    
+    immU = int(instruction_in_binary[0:20] + "000000000000", 2)
+    
+    imm = instruction_in_binary[0] + instruction_in_binary[12:20] + instruction_in_binary[11] + instruction_in_binary[1:11] + "0"
+    if (imm[0] == '1'):
+        immJ = int(imm, 2) - 2**21
+    else:
+        immJ = int(imm, 2)
+
+  
+    if (opcode == "0110011"):
+        # R type
+        op2Select = 0
+        resultSelect = 4
+        MemOp = "-1"
+        RFWrite = True
+
+        if (fun3 == "000" and fun7 == "0000000"):
+            operation = "add"
+            ALUOp = "add"
+        elif (fun3 == "000" and fun7 == "0100000"):
+            operation = "sub"
+            ALUOp = "sub"
+        elif (fun3 == "100" and "0000000"):
+            operation = "xor"
+            ALUOp = "xor"
+        elif (fun3 == "110" and fun7 == "0000000"):
+            operation = "or"
+            ALUOp = "or"
+        elif (fun3 == "111" and fun7 == "0000000"):
+            operation = "and"
+            ALUOp = "and"
+        elif (fun3 == "001" and fun7 == "0000000"):
+            operation = "sll"
+            ALUOp = "sll"
+        elif (fun3 == "101" and fun7 == "0000000"):
+            operation = "srl"
+            ALUOp = "srl"
+        elif (fun3 == "101" and fun7 == "0100000"):
+            operation = "sra"
+            ALUOp = "sra"
+        elif (fun3 == "010" and fun7 == "0000000"):
+            operation = "slt"
+            ALUOp = "slt"
+        else:
+            print("Instruction not supported")
+            swi_exit()
+
+        
+    elif (opcode == "0010011"):
+        # I type (addi, ori, andi)
+
+        op2Select = 1
+        resultSelect = 4
+        MemOp = "-1"
+        RFWrite = True
+
+        if (fun3 == "000"):
+            operation = "addi"
+            ALUOp = "add"
+        elif (fun3 == "100"):
+            operation = "xori"
+            ALUOp = "xor"
+        elif (fun3 == "110"):
+            operation = "ori"
+            ALUOp = "or"
+        elif (fun3 == "111"):
+            operation = "andi"
+            ALUOp = "and"
+        elif (fun3 == "001"):
+            operation = "slli"
+            ALUOp = "sll"
+        elif (fun3 == "101"):
+            # if (instruction_in_binary[0:7] == "000000"):
+            #     operation = "srli"
+            #     ALUOp = "srl"
+            # else:
+            #     operation = "srai"
+            #     ALUOp = "sra"
+            operation = "srli"
+            ALUOp = "srl"
+        elif (fun3 == "010"):
+            operation = "slti"
+            ALUOp = "slt"
+        else:
+            print("Instruction not supported")
+            swi_exit()
+
+        
+    elif (opcode == "0000011"):
+        # I type (lb, lh, lw)
+
+        op2Select = 1
+        resultSelect = 3
+        MemOp = "r"
+        RFWrite = True
+        ALUOp = "add"
+
+        if (fun3 == "000"):
+            operation = "lb"
+            Mem_b_h_w = "b"
+        elif (fun3 == "001"):
+            operation = "lh"
+            Mem_b_h_w = "h"
+        elif (fun3 == "010"):
+            operation = "lw"
+            Mem_b_h_w = "w"
+        else:
+            print("Instruction not supported")
+            swi_exit()
+
+        
+    elif (opcode == "0100011"):
+        # S type
+        
+        op2Select = 2
+        MemOp = "w"
+        RFWrite = False
+        ALUOp = "add"
+
+        if (fun3 == "000"):
+            operation = "sb"
+            Mem_b_h_w = "b"
+        elif (fun3 == "001"):
+            operation = "sh"
+            Mem_b_h_w = "h"
+        elif (fun3 == "010"):
+            operation = "sw"
+            Mem_b_h_w = "w"
+        else:
+            print("Instruction not supported")
+            swi_exit()
+
+
+    elif (opcode == "1100011"):
+        # B type
+        op2Select = 0
+        branchTargetSelect = 0
+        MemOp = "-1"
+        RFWrite = False
+
+        if (fun3 == "000"):
+            operation = "beq"
+            ALUOp = "beq"
+        elif (fun3 == "001"):
+            operation = "bne"
+            ALUOp = "bne"
+        elif (fun3 == "100"):
+            operation = "blt"
+            ALUOp = "blt"
+        elif (fun3 == "101"):
+            operation = "bge"
+            ALUOp = "bge"
+        else:
+            print("Instruction not supported")
+            swi_exit()
+
+    elif (opcode == "1101111"):
+        # J type
+        
+        branchTargetSelect = 1
+        resultSelect = 0
+        MemOp = "-1"
+        RFWrite = True
+        ALUOp = "-1"
+        operation = "jal"
+
+    elif (opcode == "1100111"):
+        # I type (jalr)
+        
+        resultSelect = 0
+        op2Select = 1
+        MemOp = "-1"
+        RFWrite = True
+        ALUOp = "add"
+
+        if (fun3 == "000"):
+            operation = "jalr"
+        else:
+            print("Instruction not supported")
+            swi_exit()
+        
+    elif (opcode == "0110111"):
+        # U type (lui)
+        
+        resultSelect = 1
+        MemOp = "-1"
+        RFWrite = True
+        operation = "lui"
+        ALUOp = "-1"
+
+    elif (opcode == "0010111"):
+        # U type (auipc)
+        
+        resultSelect = 2
+        MemOp = "-1"
+        RFWrite = True
+        operation = "auipc"
+        ALUOp = "-1"
+
+    else:
+        print("Instruction not supported")
+        swi_exit()
+    
+    # Condition for data dependency
+    # if (ALUOp != "-1" and ID_EX_buff.RFWrite == True and (rs1 == ID_EX_buff.rd or (rs2 == ID_EX_buff.rd and op2Select == 0))):
+    #     print("DECODE: stall")
+    #     stall = 2
+    #     return
+    
+    with IF_ID_buff.lock:
+        IF_ID_buff.isfree = True
+        IF_ID_buff.lock.notify()
+
+    operand1 = X[rs1]
+    op2 = X[rs2]
+    
+    # selecting the operand2 based on op2Select
+    if (op2Select == 0):
+        operand2 = op2
+    elif (op2Select == 1):
+        operand2 = immI
+    else:
+        operand2 = immS
+
+    msg = functions.Message(operation, rd, rs1, rs2, operand1, operand2, immB, immJ, immU)
+    msg.printMsg()
+
+    with ID_EX_buff.lock:
+        while not ID_EX_buff.isfree:
+            ID_EX_buff.lock.wait()
+
+        ID_EX_buff.isfree = False
+
+        ID_EX_buff.ALUOp = ALUOp
+        ID_EX_buff.branchTargetSelect = branchTargetSelect
+        ID_EX_buff.immB = immB
+        ID_EX_buff.immI = immI
+        ID_EX_buff.immJ = immJ
+        ID_EX_buff.immS = immS
+        ID_EX_buff.immU = immU
+        ID_EX_buff.isBranch = isBranch
+        ID_EX_buff.Mem_b_h_w = Mem_b_h_w
+        ID_EX_buff.MemOp = MemOp
+        ID_EX_buff.nextPC = bufferInfo["nextPC"]
+        ID_EX_buff.op1 = op1
+        ID_EX_buff.op2 = op2
+        ID_EX_buff.op2Select = op2Select
+        ID_EX_buff.operand1 = operand1
+        ID_EX_buff.operand2 = operand2
+        ID_EX_buff.operation = operation
+        ID_EX_buff.rd = rd
+        ID_EX_buff.resultSelect = resultSelect
+        ID_EX_buff.RFWrite = RFWrite
+        ID_EX_buff.rs1 = rs1
+        ID_EX_buff.rs2 = rs2
+
+        ID_EX_buff.lock.notify()
+    
 
 
   
 # executes the operations based on ALUOp
 def execute():
-    global rd, op2, pc_immU, operand1, operand2, instruction_word, X, MemOp, operation, RFWrite, ALUResult, ALUOp, isBranch, immU, branchTargetSelect, branchTargetAddress
+    global PC, rd, op2, pc_immU, operand1, operand2, instruction_word, X, MemOp, operation, RFWrite, ALUResult, ALUOp, isBranch, immU, branchTargetSelect, branchTargetAddress
 
+    
     if (ALUOp != "-1"):
         ALUUnit = functions.ALU(ALUOp, operand1, operand2)
         ALUResult = ALUUnit.compute()
@@ -475,6 +867,78 @@ def execute():
         isBranch = 0
 
     pc_immU = PC + immU
+
+
+def execute2():
+    global ID_EX_buff, EX_MEM_buff, ALUResult, isBranch, branchTargetAddress
+
+    bufferInfo = ID_EX_buff.getInfo()
+
+    with ID_EX_buff.lock:
+        ID_EX_buff.isfree = True
+        ID_EX_buff.lock.notify()
+
+    if (bufferInfo["isEnd"]):
+        print("EXECUTE: No Operation")
+
+        with EX_MEM_buff.lock:
+            while not EX_MEM_buff.isfree:
+                EX_MEM_buff.lock.wait()
+            EX_MEM_buff.isfree = False
+
+            EX_MEM_buff.isEnd = True
+
+            EX_MEM_buff.lock.notify()
+
+        return
+
+
+    if (bufferInfo["ALUOp"] != "-1"):
+        ALUUnit = functions.ALU(bufferInfo["ALUOp"], bufferInfo["operand1"], bufferInfo["operand2"])
+        ALUResult = ALUUnit.compute()
+        print(f"EXECUTE: {bufferInfo['ALUOp']} 0x{bufferInfo['operand1']:08x} and 0x{bufferInfo['operand2']:08x}")
+    else:
+        print(f"EXECUTE: No ALU operation")
+
+    if (bufferInfo["branchTargetSelect"] == 0):
+        branchTargetAddress = bufferInfo["nextPC"] - 4 + bufferInfo["immB"]
+    else:
+        branchTargetAddress = bufferInfo["nextPC"] - 4 + bufferInfo["immJ"]
+    
+    if (bufferInfo["operation"] == "beq" or bufferInfo["operation"] == "bne" or bufferInfo["operation"] == "blt" or bufferInfo["operation"] == "bge"):
+        if (ALUResult == 1):
+            isBranch = 1
+        else:
+            isBranch = 0
+    elif (bufferInfo["operation"] == "jal"):
+        isBranch = 1
+    elif (bufferInfo["operation"] == "jalr"):
+        isBranch = 2
+    else:
+        isBranch = 0
+
+    pc_immU = bufferInfo["nextPC"] - 4 + bufferInfo["immU"]
+
+    with EX_MEM_buff.lock:
+        while not EX_MEM_buff.isfree:
+            EX_MEM_buff.lock.wait()
+        
+        EX_MEM_buff.isfree = False
+
+        EX_MEM_buff.nextPC = bufferInfo["nextPC"]
+        EX_MEM_buff.ALUResult = ALUResult
+        EX_MEM_buff.branchTargetAddress = branchTargetAddress
+        EX_MEM_buff.isBranch = isBranch
+        EX_MEM_buff.Mem_b_h_w = bufferInfo["Mem_b_h_w"]
+        EX_MEM_buff.MemOp = bufferInfo["MemOp"]
+        EX_MEM_buff.op2 = bufferInfo["op2"]
+        EX_MEM_buff.immU = bufferInfo["immU"]
+        EX_MEM_buff.pc_immU = pc_immU
+        EX_MEM_buff.rd = bufferInfo["rd"]
+        EX_MEM_buff.resultSelect = bufferInfo["resultSelect"]
+        EX_MEM_buff.RFWrite = bufferInfo["RFWrite"]
+
+        EX_MEM_buff.lock.notify()
     
 
 
@@ -505,6 +969,71 @@ def mem():
         print("MEMORY: No memory operation")
 
 
+def mem2():
+    global EX_MEM_buff, MEM_WB_buff, data_MEM, MemOp, ALUResult, Mem_b_h_w, loadData, op2
+
+    bufferInfo = EX_MEM_buff.getInfo()
+    
+    with EX_MEM_buff.lock:
+        EX_MEM_buff.isfree = True
+        EX_MEM_buff.lock.notify()
+
+    if (bufferInfo["isEnd"]):
+        print("MEMORY: No Operation")
+
+        with MEM_WB_buff.lock:
+            while not MEM_WB_buff.isfree:
+                MEM_WB_buff.lock.wait()
+            MEM_WB_buff.isfree = False
+            
+            MEM_WB_buff.isEnd = True
+
+            MEM_WB_buff.lock.notify()
+            
+        return
+    
+
+    
+    if (bufferInfo["MemOp"] == "r"):
+        if (bufferInfo["Mem_b_h_w"] == "b"):
+            loadData = read_byte(bufferInfo["ALUResult"], data_MEM)
+        elif (bufferInfo["Mem_b_h_w"] == "h"):
+            loadData = read_half_word(bufferInfo["ALUResult"], data_MEM)
+        else:
+            loadData = read_word(bufferInfo["ALUResult"], data_MEM)
+        print(f"MEMORY: READ 0x{loadData:08x} from address 0x{bufferInfo['ALUResult']:08x}")
+
+    elif (bufferInfo["MemOp"] == "w"):
+        if (bufferInfo["Mem_b_h_w"] == "b"):
+            write_byte(data_MEM, bufferInfo["ALUResult"], bufferInfo["op2"])
+        elif (bufferInfo["Mem_b_h_w"] == "h"):
+            write_half_word(data_MEM, bufferInfo["ALUResult"], bufferInfo["op2"])
+        else:
+            write_word(data_MEM, bufferInfo["ALUResult"], bufferInfo["op2"])
+        print(f"MEMORY: WRITE 0x{bufferInfo['op2']:08x} to address 0x{bufferInfo['ALUResult']:08x}")
+        
+    else:
+        print("MEMORY: No memory operation")
+
+    with MEM_WB_buff.lock:
+        while not MEM_WB_buff.isfree:
+            MEM_WB_buff.lock.wait()
+        MEM_WB_buff.isfree = False
+
+        MEM_WB_buff.ALUResult = bufferInfo["ALUResult"]
+        MEM_WB_buff.immU = bufferInfo["immU"]
+        MEM_WB_buff.pc_immU = bufferInfo["pc_immU"]
+        MEM_WB_buff.loadData = loadData
+        MEM_WB_buff.nextPC = bufferInfo["nextPC"]
+        MEM_WB_buff.rd = bufferInfo["rd"]
+        MEM_WB_buff.resultSelect = bufferInfo["resultSelect"]
+        MEM_WB_buff.RFWrite = bufferInfo["RFWrite"]
+
+        MEM_WB_buff.lock.notify()
+
+
+
+
 
 # writes the results back to register file
 def write_back():
@@ -513,20 +1042,58 @@ def write_back():
     if (RFWrite):
         if (rd != 0):
             if (resultSelect == 0):
-                X[rd] = PC + 4
+                X[rd] = nextPC
                 print(f"WRITEBACK: WRITE 0x{nextPC:08x} to x{rd}")
             elif (resultSelect == 1):
                 X[rd] = immU
                 print(f"WRITEBACK: WRITE 0x{immU:08x} to x{rd}")
             elif (resultSelect == 2):
-                X[rd] = PC + immU
-                print(f"WRITEBACK: WRITE 0x{PC+immU:08x} to x{rd}")
+                X[rd] = pc_immU
+                print(f"WRITEBACK: WRITE 0x{pc_immU:08x} to x{rd}")
             elif (resultSelect == 3):
                 X[rd] = loadData
                 print(f"WRITEBACK: WRITE 0x{loadData:08x} to x{rd}")
             else:
                 X[rd] = ALUResult
                 print(f"WRITEBACK: WRITE 0x{ALUResult:08x} to x{rd}")
+        else:
+            print("WRITEBACK: Destination register x0. operation ignored")
+    else:
+        print("WRITEBACK: No operation")
+
+
+
+def write_back2():
+    global isExit, MEM_WB_buff, PC, immU, loadData, ALUResult, RFWrite, resultSelect, rd, X, nextPC, pc_immU
+
+    bufferInfo = MEM_WB_buff.getInfo()
+
+    with MEM_WB_buff.lock:
+        MEM_WB_buff.isfree = True
+        MEM_WB_buff.lock.notify()
+
+    if (bufferInfo["isEnd"]):
+        print("WRITEBACK: No Operation")
+        isExit = True
+        return
+
+    if (bufferInfo["RFWrite"]):
+        if (bufferInfo["rd"] != 0):
+            if (bufferInfo["resultSelect"] == 0):
+                X[bufferInfo["rd"]] = bufferInfo["nextPC"]
+                print(f"WRITEBACK: WRITE 0x{bufferInfo['nextPC']:08x} to x{bufferInfo['rd']}")
+            elif (bufferInfo["resultSelect"] == 1):
+                X[bufferInfo["rd"]] = bufferInfo["immU"]
+                print(f"WRITEBACK: WRITE 0x{bufferInfo['immU']:08x} to x{bufferInfo['rd']}")
+            elif (bufferInfo["resultSelect"] == 2):
+                X[bufferInfo["rd"]] = bufferInfo["pc_immU"]
+                print(f"WRITEBACK: WRITE 0x{bufferInfo['pc_immU']:08x} to x{bufferInfo['rd']}")
+            elif (bufferInfo["resultSelect"] == 3):
+                X[bufferInfo["rd"]] = bufferInfo["loadData"]
+                print(f"WRITEBACK: WRITE 0x{bufferInfo['loadData']:08x} to x{bufferInfo['rd']}")
+            else:
+                X[bufferInfo["rd"]] = bufferInfo["ALUResult"]
+                print(f"WRITEBACK: WRITE 0x{bufferInfo['ALUResult']:08x} to x{bufferInfo['rd']}")
         else:
             print("WRITEBACK: Destination register x0. operation ignored")
     else:
