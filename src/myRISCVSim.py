@@ -1,6 +1,5 @@
 import functions
 import structures as st
-import threading
 
 """
 The project is developed as part of Computer Architecture class
@@ -62,39 +61,45 @@ isBranch = 0
 
 isEnd = False
 stall = 0
+PC_on_missprediction = 0
+isFlush = False
+isLastIns = False
+stallUp = -1
 
 IF_ID_buff = st.IF_ID_Pipeline_Registers()
 ID_EX_buff = st.ID_EX_Pipeline_Registers()
 EX_MEM_buff = st.EX_MEM_Pipeline_Registers()
 MEM_WB_buff = st.MEM_WB_Pipeline_Registers()
 
+btb = st.BTB()
+
+out_file = open("out.txt", "w")
+
 
 def run_riscvsim():
-    global PC, clock
+    global out_file, PC, clock, isFlush, PC_on_missprediction, IF_ID_buff, ID_EX_buff, isExit, isLastIns
 
     while(isExit == False):
-        t1 = threading.Thread(target=fetch1)
-        t2 = threading.Thread(target=decode1)
-        t3 = threading.Thread(target=execute2)
-        t4 = threading.Thread(target=mem2)
-        t5 = threading.Thread(target=write_back2)
-
-        t1.start()
-        t2.start()
-        t3.start()
-        t4.start()
-        t5.start()
-
-        t1.join()
-        t2.join()
-        t3.join()
-        t4.join()
-        t5.join()
+        write_back2()
+        mem2()
+        execute2()
+        decode1()
+        fetch1()
 
         clock += 1
+        # out_file.write("clock cycle : " + clock + "-------------------------------------------------------------------------------------------------\n")
         print("clock cycle : ", clock)
         print("-------------------------------------------------------------------------------------------------\n")
-    
+
+        if (isFlush):
+            PC = PC_on_missprediction
+            isLastIns = False
+            IF_ID_buff.flush()
+            ID_EX_buff.flush()
+            isFlush = False
+
+        if (isLastIns and IF_ID_buff.isStall and ID_EX_buff.isStall and EX_MEM_buff.isStall and MEM_WB_buff.isStall):
+            isExit = True
     swi_exit()
 
 
@@ -112,7 +117,7 @@ def run_riscvsim():
 # it is used to set the reset values
 # reset all registers and memory content to 0
 def reset_proc():
-    global X, PC, data_MEM, ins_MEM, IF_ID_buff, ID_EX_buff, EX_MEM_buff, MEM_WB_buff
+    global X, PC, data_MEM, ins_MEM, IF_ID_buff, ID_EX_buff, EX_MEM_buff, MEM_WB_buff, btb
 
     PC = 0
 
@@ -123,10 +128,12 @@ def reset_proc():
     data_MEM = {}
     ins_MEM = {}
 
-    IF_ID_buff = st.IF_ID_Pipeline_Registers()
-    ID_EX_buff = st.ID_EX_Pipeline_Registers()
-    EX_MEM_buff = st.EX_MEM_Pipeline_Registers()
-    MEM_WB_buff = st.MEM_WB_Pipeline_Registers()
+    IF_ID_buff.flush()
+    ID_EX_buff.flush()
+    EX_MEM_buff.flush()
+    MEM_WB_buff.flush()
+
+    btb.reset()
 
 
 
@@ -171,50 +178,58 @@ def fetch():
     nextPC = PC + 4
 
 def fetch1():
-    global ins_MEM, PC, instruction_word, isExit, nextPC, IF_ID_buff, isEnd
+    global out_file, stallUp, isLastIns, stall, ins_MEM, PC, instruction_word, isExit, nextPC, IF_ID_buff, isEnd
 
-    if (stall != 0):
+    if (stall > 1 and stall < stallUp):
         print("FETCH: stall")
+        # out_file.write("FETCH:")
+        stall -= 1
         return
+    
+    if (stall == 1):
+        stall -= 1
 
-    if (isEnd):
-        print("FETCH: No Operation")
-        # IF_ID_buff.isEnd = True
+    # if (isEnd):
+    #     print("FETCH: No Operation")
+    if (isLastIns):
+        print("FETCH: No Operation end")
+
     else:
         instruction_word = read_word(PC, ins_MEM)
-        print(f"FETCH:Fetch instruction 0x{instruction_word:08x} from address 0x{hex(PC)}")
+        print(f"FETCH:Fetch instruction 0x{instruction_word:08x} from address {hex(PC)}")
+
+        if (stall == stallUp):
+                print("stall")
+                stall -= 1
+                return
     
         if (instruction_word == int('0xEF000011', 16)):
-            isEnd = True
-            with IF_ID_buff.lock:
-                while not IF_ID_buff.isfree:
-                    IF_ID_buff.lock.wait()
-                    # if (stall != 0):
-                    #     print("FETCH: stall")
-                    #     return
+            isLastIns = True
+            IF_ID_buff.flush()
+            # isEnd = True
+            # IF_ID_buff.isEnd = True
 
-                IF_ID_buff.isfree = False
-
-                IF_ID_buff.isEnd = True
-
-                IF_ID_buff.lock.notify()
         else:
             nextPC = PC + 4
-            PC = nextPC
+            IF_ID_buff.PC = PC
 
-            with IF_ID_buff.lock:
-                while not IF_ID_buff.isfree:
-                    IF_ID_buff.lock.wait()
-                    # if (stall != 0):
-                    #     print("FETCH: stall")
-                    #     return
-
-                IF_ID_buff.isfree = False
+            if (btb.hasPC(PC)):
+                tar = btb.getTargetAddress(PC)
+                if (tar[1] > 1):
+                    PC = tar[0]
+                    IF_ID_buff.branchTaken = True
+                else:
+                    PC = nextPC
+                    IF_ID_buff.branchTaken = False
+            else:
+                PC = nextPC
+                IF_ID_buff.branchTaken = False
                 
-                IF_ID_buff.instruction_word = instruction_word
-                IF_ID_buff.nextPC = nextPC
+            IF_ID_buff.instruction_word = instruction_word
+            IF_ID_buff.nextPC = nextPC
+            IF_ID_buff.isStall = False
+            IF_ID_buff.predictedPC = PC
 
-                IF_ID_buff.lock.notify()
 
     
 
@@ -527,27 +542,23 @@ def decode():
     
     
 def decode1():
-    global stall, IF_ID_buff, ID_EX_buff, rd, rs1, rs2, op1, op2, operand1, operand2,op2Select, instruction_word, X, MemOp,Mem_b_h_w, operation, resultSelect, RFWrite, immB, immI, immJ, immS, immU, branchTargetSelect, resultSelect, ALUOp, isExit
+    global stallUp, stall, IF_ID_buff, ID_EX_buff, rd, rs1, rs2, op1, op2, operand1, operand2,op2Select, instruction_word, X, MemOp,Mem_b_h_w, operation, resultSelect, RFWrite, immB, immI, immJ, immS, immU, branchTargetSelect, resultSelect, ALUOp, isExit
 
-    if (stall != 0):
+    if (stall > 1):
         print("DECODE: stall")
-        stall -= 1
         return
     
     bufferInfo = IF_ID_buff.getInfo()
 
-    if (bufferInfo["isEnd"]):
-        print("DECODE: No Operation")
-        # TODO
-        with ID_EX_buff.lock:
-            while not ID_EX_buff.isfree:
-                ID_EX_buff.lock.wait()
-            ID_EX_buff.isfree = False
-
-            ID_EX_buff.isEnd = True
-
-            ID_EX_buff.lock.notify()
+    if (bufferInfo["isStall"]):
+        print("DECODE: stall")
+        ID_EX_buff.isStall = True
         return
+
+    # if (bufferInfo["isEnd"]):
+    #     print("DECODE: No Operation")
+    #     ID_EX_buff.isEnd = True
+    #     return
 
     instruction_in_binary = bin(bufferInfo["instruction_word"])[2:].zfill(32)
     opcode = instruction_in_binary[25:32]
@@ -733,7 +744,7 @@ def decode1():
             swi_exit()
 
     elif (opcode == "1101111"):
-        # J type
+        # J type (jal)
         
         branchTargetSelect = 1
         resultSelect = 0
@@ -741,6 +752,7 @@ def decode1():
         RFWrite = True
         ALUOp = "-1"
         operation = "jal"
+
 
     elif (opcode == "1100111"):
         # I type (jalr)
@@ -776,19 +788,35 @@ def decode1():
         ALUOp = "-1"
 
     else:
-        print("Instruction not supported")
+        print("Error! Instruction not supported\nexiting the program")
         swi_exit()
     
     # Condition for data dependency
-    # if (ALUOp != "-1" and ID_EX_buff.RFWrite == True and (rs1 == ID_EX_buff.rd or (rs2 == ID_EX_buff.rd and op2Select == 0))):
-    #     print("DECODE: stall")
-    #     stall = 2
-    #     return
+    if (stall == 0 and ALUOp != "-1" and ID_EX_buff.RFWrite == True and (rs1 == ID_EX_buff.rd or (rs2 == ID_EX_buff.rd and op2Select == 0))):
+        print("DECODE: stall1")
+        stall = 4
+        stallUp = 4
+        # ID_EX_buff.isStall = True
+        ID_EX_buff.flush()
+        return
     
-    with IF_ID_buff.lock:
-        IF_ID_buff.isfree = True
-        IF_ID_buff.lock.notify()
-
+    if (stall == 0 and ALUOp != "-1" and EX_MEM_buff.RFWrite == True and (rs1 == EX_MEM_buff.rd or (rs2 == EX_MEM_buff.rd and op2Select == 0))):
+        print("DECODE: stall2")
+        stall = 3
+        stallUp = 3
+        # ID_EX_buff.isStall = True
+        ID_EX_buff.flush()
+        return
+    
+    if (stall == 0 and ALUOp != "-1" and MEM_WB_buff.RFWrite == True and (rs1 == MEM_WB_buff.rd or (rs2 == MEM_WB_buff.rd and op2Select == 0))):
+        print("DECODE: stall3")
+        stall = 2
+        stallUp = 2
+        # ID_EX_buff.isStall = True
+        ID_EX_buff.flush()
+        return
+    
+    
     operand1 = X[rs1]
     op2 = X[rs2]
     
@@ -803,37 +831,32 @@ def decode1():
     msg = functions.Message(operation, rd, rs1, rs2, operand1, operand2, immB, immJ, immU)
     msg.printMsg()
 
-    with ID_EX_buff.lock:
-        while not ID_EX_buff.isfree:
-            ID_EX_buff.lock.wait()
-
-        ID_EX_buff.isfree = False
-
-        ID_EX_buff.ALUOp = ALUOp
-        ID_EX_buff.branchTargetSelect = branchTargetSelect
-        ID_EX_buff.immB = immB
-        ID_EX_buff.immI = immI
-        ID_EX_buff.immJ = immJ
-        ID_EX_buff.immS = immS
-        ID_EX_buff.immU = immU
-        ID_EX_buff.isBranch = isBranch
-        ID_EX_buff.Mem_b_h_w = Mem_b_h_w
-        ID_EX_buff.MemOp = MemOp
-        ID_EX_buff.nextPC = bufferInfo["nextPC"]
-        ID_EX_buff.op1 = op1
-        ID_EX_buff.op2 = op2
-        ID_EX_buff.op2Select = op2Select
-        ID_EX_buff.operand1 = operand1
-        ID_EX_buff.operand2 = operand2
-        ID_EX_buff.operation = operation
-        ID_EX_buff.rd = rd
-        ID_EX_buff.resultSelect = resultSelect
-        ID_EX_buff.RFWrite = RFWrite
-        ID_EX_buff.rs1 = rs1
-        ID_EX_buff.rs2 = rs2
-
-        ID_EX_buff.lock.notify()
-    
+    ID_EX_buff.ALUOp = ALUOp
+    ID_EX_buff.branchTargetSelect = branchTargetSelect
+    ID_EX_buff.immB = immB
+    ID_EX_buff.immI = immI
+    ID_EX_buff.immJ = immJ
+    ID_EX_buff.immS = immS
+    ID_EX_buff.immU = immU
+    ID_EX_buff.isBranch = isBranch
+    ID_EX_buff.Mem_b_h_w = Mem_b_h_w
+    ID_EX_buff.MemOp = MemOp
+    ID_EX_buff.nextPC = bufferInfo["nextPC"]
+    ID_EX_buff.op1 = op1
+    ID_EX_buff.op2 = op2
+    ID_EX_buff.op2Select = op2Select
+    ID_EX_buff.operand1 = operand1
+    ID_EX_buff.operand2 = operand2
+    ID_EX_buff.operation = operation
+    ID_EX_buff.rd = rd
+    ID_EX_buff.resultSelect = resultSelect
+    ID_EX_buff.RFWrite = RFWrite
+    ID_EX_buff.rs1 = rs1
+    ID_EX_buff.rs2 = rs2
+    ID_EX_buff.isStall = False
+    ID_EX_buff.branchTaken = IF_ID_buff.branchTaken
+    ID_EX_buff.PC = bufferInfo["PC"]
+    ID_EX_buff.predictedPC = bufferInfo["predictedPC"]
 
 
   
@@ -870,27 +893,21 @@ def execute():
 
 
 def execute2():
-    global ID_EX_buff, EX_MEM_buff, ALUResult, isBranch, branchTargetAddress
+    global btb, isFlush, PC_on_missprediction, ID_EX_buff, EX_MEM_buff, ALUResult, isBranch, branchTargetAddress
 
     bufferInfo = ID_EX_buff.getInfo()
 
-    with ID_EX_buff.lock:
-        ID_EX_buff.isfree = True
-        ID_EX_buff.lock.notify()
-
-    if (bufferInfo["isEnd"]):
-        print("EXECUTE: No Operation")
-
-        with EX_MEM_buff.lock:
-            while not EX_MEM_buff.isfree:
-                EX_MEM_buff.lock.wait()
-            EX_MEM_buff.isfree = False
-
-            EX_MEM_buff.isEnd = True
-
-            EX_MEM_buff.lock.notify()
-
+    if (bufferInfo["isStall"]):
+        print("EXECUTE: stall")
+        # EX_MEM_buff.isStall = True
+        EX_MEM_buff.flush()
         return
+
+
+    # if (bufferInfo["isEnd"]):
+    #     print("EXECUTE: No Operation")
+    #     EX_MEM_buff.isEnd = True
+    #     return
 
 
     if (bufferInfo["ALUOp"] != "-1"):
@@ -904,41 +921,63 @@ def execute2():
         branchTargetAddress = bufferInfo["nextPC"] - 4 + bufferInfo["immB"]
     else:
         branchTargetAddress = bufferInfo["nextPC"] - 4 + bufferInfo["immJ"]
+        
     
     if (bufferInfo["operation"] == "beq" or bufferInfo["operation"] == "bne" or bufferInfo["operation"] == "blt" or bufferInfo["operation"] == "bge"):
+        if (not btb.hasPC(bufferInfo["PC"])):
+            print("EXECUTE:Hiiiiiiiiiiiiiiiiiiiiiiiiii\n")
+            btb.addNewPC(bufferInfo["PC"], branchTargetAddress, 1)
         if (ALUResult == 1):
             isBranch = 1
+            if (not ID_EX_buff.branchTaken):
+                isFlush = True
+                PC_on_missprediction = branchTargetAddress
+                btb.updateisTaken(bufferInfo["PC"], True)
         else:
             isBranch = 0
+            if (ID_EX_buff.branchTaken):
+                isFlush = True
+                PC_on_missprediction = ID_EX_buff.nextPC
+                btb.updateisTaken(bufferInfo["PC"], False)
+                
     elif (bufferInfo["operation"] == "jal"):
         isBranch = 1
+        if (not btb.hasPC(bufferInfo["PC"])):
+            btb.addNewPC(bufferInfo["PC"], branchTargetAddress, 3)
+
+        if (not ID_EX_buff.branchTaken):
+            isFlush = True
+            PC_on_missprediction = branchTargetAddress
+            btb.updateisTaken(bufferInfo["PC"], True)
+
     elif (bufferInfo["operation"] == "jalr"):
         isBranch = 2
+        if (not btb.hasPC(bufferInfo["PC"])):
+            btb.addNewPC(bufferInfo["PC"], ALUResult, 3)
+
+        if (not bufferInfo["predictedPC"] == ALUResult):
+            isFlush = True
+            PC_on_missprediction = ALUResult
+            btb.updateisTaken(bufferInfo["PC"], True)
     else:
         isBranch = 0
 
     pc_immU = bufferInfo["nextPC"] - 4 + bufferInfo["immU"]
 
-    with EX_MEM_buff.lock:
-        while not EX_MEM_buff.isfree:
-            EX_MEM_buff.lock.wait()
-        
-        EX_MEM_buff.isfree = False
+    EX_MEM_buff.nextPC = bufferInfo["nextPC"]
+    EX_MEM_buff.ALUResult = ALUResult
+    EX_MEM_buff.branchTargetAddress = branchTargetAddress
+    EX_MEM_buff.isBranch = isBranch
+    EX_MEM_buff.Mem_b_h_w = bufferInfo["Mem_b_h_w"]
+    EX_MEM_buff.MemOp = bufferInfo["MemOp"]
+    EX_MEM_buff.op2 = bufferInfo["op2"]
+    EX_MEM_buff.immU = bufferInfo["immU"]
+    EX_MEM_buff.pc_immU = pc_immU
+    EX_MEM_buff.rd = bufferInfo["rd"]
+    EX_MEM_buff.resultSelect = bufferInfo["resultSelect"]
+    EX_MEM_buff.RFWrite = bufferInfo["RFWrite"]
+    EX_MEM_buff.isStall = False
 
-        EX_MEM_buff.nextPC = bufferInfo["nextPC"]
-        EX_MEM_buff.ALUResult = ALUResult
-        EX_MEM_buff.branchTargetAddress = branchTargetAddress
-        EX_MEM_buff.isBranch = isBranch
-        EX_MEM_buff.Mem_b_h_w = bufferInfo["Mem_b_h_w"]
-        EX_MEM_buff.MemOp = bufferInfo["MemOp"]
-        EX_MEM_buff.op2 = bufferInfo["op2"]
-        EX_MEM_buff.immU = bufferInfo["immU"]
-        EX_MEM_buff.pc_immU = pc_immU
-        EX_MEM_buff.rd = bufferInfo["rd"]
-        EX_MEM_buff.resultSelect = bufferInfo["resultSelect"]
-        EX_MEM_buff.RFWrite = bufferInfo["RFWrite"]
-
-        EX_MEM_buff.lock.notify()
     
 
 
@@ -973,24 +1012,17 @@ def mem2():
     global EX_MEM_buff, MEM_WB_buff, data_MEM, MemOp, ALUResult, Mem_b_h_w, loadData, op2
 
     bufferInfo = EX_MEM_buff.getInfo()
-    
-    with EX_MEM_buff.lock:
-        EX_MEM_buff.isfree = True
-        EX_MEM_buff.lock.notify()
 
-    if (bufferInfo["isEnd"]):
-        print("MEMORY: No Operation")
-
-        with MEM_WB_buff.lock:
-            while not MEM_WB_buff.isfree:
-                MEM_WB_buff.lock.wait()
-            MEM_WB_buff.isfree = False
-            
-            MEM_WB_buff.isEnd = True
-
-            MEM_WB_buff.lock.notify()
-            
+    if (bufferInfo["isStall"]):
+        print("MEMORY: stall")
+        # MEM_WB_buff.isStall = True
+        MEM_WB_buff.flush()
         return
+    
+    # if (bufferInfo["isEnd"]):
+    #     print("MEMORY: No Operation")
+    #     MEM_WB_buff.isEnd = True
+    #     return
     
 
     
@@ -1015,21 +1047,15 @@ def mem2():
     else:
         print("MEMORY: No memory operation")
 
-    with MEM_WB_buff.lock:
-        while not MEM_WB_buff.isfree:
-            MEM_WB_buff.lock.wait()
-        MEM_WB_buff.isfree = False
-
-        MEM_WB_buff.ALUResult = bufferInfo["ALUResult"]
-        MEM_WB_buff.immU = bufferInfo["immU"]
-        MEM_WB_buff.pc_immU = bufferInfo["pc_immU"]
-        MEM_WB_buff.loadData = loadData
-        MEM_WB_buff.nextPC = bufferInfo["nextPC"]
-        MEM_WB_buff.rd = bufferInfo["rd"]
-        MEM_WB_buff.resultSelect = bufferInfo["resultSelect"]
-        MEM_WB_buff.RFWrite = bufferInfo["RFWrite"]
-
-        MEM_WB_buff.lock.notify()
+    MEM_WB_buff.ALUResult = bufferInfo["ALUResult"]
+    MEM_WB_buff.immU = bufferInfo["immU"]
+    MEM_WB_buff.pc_immU = bufferInfo["pc_immU"]
+    MEM_WB_buff.loadData = loadData
+    MEM_WB_buff.nextPC = bufferInfo["nextPC"]
+    MEM_WB_buff.rd = bufferInfo["rd"]
+    MEM_WB_buff.resultSelect = bufferInfo["resultSelect"]
+    MEM_WB_buff.RFWrite = bufferInfo["RFWrite"]
+    MEM_WB_buff.isStall = False
 
 
 
@@ -1068,14 +1094,14 @@ def write_back2():
 
     bufferInfo = MEM_WB_buff.getInfo()
 
-    with MEM_WB_buff.lock:
-        MEM_WB_buff.isfree = True
-        MEM_WB_buff.lock.notify()
-
-    if (bufferInfo["isEnd"]):
-        print("WRITEBACK: No Operation")
-        isExit = True
+    if (bufferInfo["isStall"]):
+        print("WRITEBACK: stall")
         return
+
+    # if (bufferInfo["isEnd"]):
+    #     print("WRITEBACK: No Operation")
+    #     isExit = True
+    #     return
 
     if (bufferInfo["RFWrite"]):
         if (bufferInfo["rd"] != 0):
