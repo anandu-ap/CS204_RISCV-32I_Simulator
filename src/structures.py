@@ -237,8 +237,17 @@ class BTB:
     
     def updateisTaken(self, pc, isTaken):
         prediction = self.buff[pc][1]
-        prediction = (prediction+1 if prediction < 3 else prediction) if isTaken else (prediction-1 if prediction > 0 else prediction)
+        if (isTaken):
+            if (prediction < 3):
+                prediction += 1
+        else:
+            if (prediction > 0):
+                prediction -= 1
+
         self.buff[pc] = (self.buff[pc][0], prediction)
+
+    def updateTargetAddr(self, pc, tarAddr):
+        self.buff[pc] = (tarAddr, 3)
     
     def hasPC(self, pc):
         if pc in self.buff:

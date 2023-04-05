@@ -117,31 +117,31 @@ class Message:
             print("Some error happened")
 
     def printMsgR(self):
-        print(f"DECODE: {self.operation} x{self.rd}, x{self.rs1}, x{self.rs2}")
-        print(f"DECODE: Read registers x{self.rs1} = {self.operand1}, x{self.rs2} = {self.operand2}")
+        print(f"DECODE: {self.operation} x{self.rd}, x{self.rs1}, x{self.rs2}. Read registers x{self.rs1} = {self.operand1}, x{self.rs2} = {self.operand2}")
+        # print(f"DECODE: Read registers x{self.rs1} = {self.operand1}, x{self.rs2} = {self.operand2}")
     
     def printMsgI(self):
-        print(f"DECODE: {self.operation} x{self.rd}, x{self.rs1}, {self.operand2}")
-        print(f"DECODE: Read registers x{self.rs1} = {self.operand1}")
+        print(f"DECODE: {self.operation} x{self.rd}, x{self.rs1}, {self.operand2}. Read registers x{self.rs1} = {self.operand1}")
+        # print(f"DECODE: Read registers x{self.rs1} = {self.operand1}")
     
     def printMsgLoad(self):
-        print(f"DECODE: {self.operation} x{self.rd}, {self.operand2}(x{self.rs1})")
-        print(f"DECODE: Read registers x{self.rs1} = {self.operand1}")
+        print(f"DECODE: {self.operation} x{self.rd}, {self.operand2}(x{self.rs1}). Read registers x{self.rs1} = {self.operand1}")
+        # print(f"DECODE: Read registers x{self.rs1} = {self.operand1}")
 
     def printMsgStore(self):
-        print(f"DECODE: {self.operation} x{self.rs2}, {self.operand2}(x{self.rs1})")
-        print(f"DECODE: Read registers x{self.rs1} = {self.operand1}, x{self.rs2} = {self.operand2}")
+        print(f"DECODE: {self.operation} x{self.rs2}, {self.operand2}(x{self.rs1}). Read registers x{self.rs1} = {self.operand1}, x{self.rs2} = {self.operand2}")
+        # print(f"DECODE: Read registers x{self.rs1} = {self.operand1}, x{self.rs2} = {self.operand2}")
 
     def printMsgB(self):
-        print(f"DECODE: {self.operation} x{self.rs1}, x{self.rs2}, {self.immB}")
-        print(f"DECODE: Read registers x{self.rs1} = {self.operand1}, x{self.rs2} = {self.operand2}")
+        print(f"DECODE: {self.operation} x{self.rs1}, x{self.rs2}, {self.immB}. Read registers x{self.rs1} = {self.operand1}, x{self.rs2} = {self.operand2}")
+        # print(f"DECODE: Read registers x{self.rs1} = {self.operand1}, x{self.rs2} = {self.operand2}")
 
     def printMsgJ(self):
         print(f"DECODE: {self.operation} x{self.rd}, {self.immJ}")
     
     def printMsgJalr(self):
-        print(f"DECODE: {self.operation} x{self.rd}, {self.operand2}(x{self.rs1})")
-        print(f"DECODE: Read registers x{self.rs1} = {self.operand1}")
+        print(f"DECODE: {self.operation} x{self.rd}, {self.operand2}(x{self.rs1}). Read registers x{self.rs1} = {self.operand1}")
+        # print(f"DECODE: Read registers x{self.rs1} = {self.operand1}")
 
     def printMsgU(self):
         print(f"DECODE: {self.operation} x{self.rd}, {self.immU}")
