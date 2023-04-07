@@ -145,6 +145,7 @@ class EX_MEM_Pipeline_Registers:
         self.Mem_b_h_w = ""
         self.RFWrite = False
         self.resultSelect = 0
+        self.op2Select = 0
         self.isEnd = False
         self.isStall = True
         self.isEmpty = True
@@ -163,6 +164,7 @@ class EX_MEM_Pipeline_Registers:
             "Mem_b_h_w": self.Mem_b_h_w,
             "RFWrite": self.RFWrite,
             "resultSelect": self.resultSelect,
+            "op2Select": self.op2Select,
             "isEnd": self.isEnd,
             "isStall":self.isStall
         }
@@ -195,6 +197,7 @@ class MEM_WB_Pipeline_Registers:
         self.rd = 0
 
         self.RFWrite = False
+        self.MemOp = "-1"
         self.resultSelect = 0
         self.isEnd = False
         self.isStall = True
@@ -209,6 +212,7 @@ class MEM_WB_Pipeline_Registers:
             "loadData": self.loadData,
             "rd": self.rd,
             "RFWrite": self.RFWrite,
+            "MemOp": self.MemOp,
             "resultSelect": self.resultSelect,
             "isEnd": self.isEnd,
             "isStall":self.isStall
@@ -227,6 +231,21 @@ class MEM_WB_Pipeline_Registers:
         self.isEnd = False
         self.isStall = True
         self.isEmpty = True
+
+    def copy(self, target_buffer):
+        self.nextPC = target_buffer.nextPC
+        self.ALUResult = target_buffer.ALUResult
+        self.immU = target_buffer.immU
+        self.pc_immU = target_buffer.pc_immU
+        self.loadData = target_buffer.loadData
+        self.rd = target_buffer.rd
+
+        self.RFWrite = target_buffer.RFWrite
+        self.MemOp = target_buffer.MemOp
+        self.resultSelect = target_buffer.resultSelect
+        self.isEnd = target_buffer.isEnd
+        self.isStall = target_buffer.isStall
+        self.isEmpty = target_buffer.isEmpty
 
 class BTB:
     def __init__(self):

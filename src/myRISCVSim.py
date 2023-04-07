@@ -77,7 +77,12 @@ ID_EX_buff = st.ID_EX_Pipeline_Registers()
 EX_MEM_buff = st.EX_MEM_Pipeline_Registers()
 MEM_WB_buff = st.MEM_WB_Pipeline_Registers()
 
+# temporary buffer to copy contents of MEM_WB_buff
+temp_MEM_WB_buff = st.MEM_WB_Pipeline_Registers()
+
+# Branch Target buffer
 btb = st.BTB()
+
 
 def run_riscvsim():
     global PC, clock, isFlush, PC_on_missprediction, IF_ID_buff, ID_EX_buff, isExit, isLastIns, isPipelined
@@ -145,8 +150,6 @@ def reset_proc():
     MEM_WB_buff.flush()
 
     btb.reset()
-
-
 
 
 # load_program_memory reads the input memory, and pupulates the instruction 
@@ -776,32 +779,47 @@ def decode_p():
     
     # Condition for data dependency
     # print("DP Var : stall = ", stall, " ALUOp: ", ALUOp, " IDEXBuff.RFWrite: ", ID_EX_buff.RFWrite, " rs1: ", rs1, " rs2: ", rs2, " op2select: ", op2Select)
-    if (stall == 0 and ALUOp != "-1" and ID_EX_buff.RFWrite == True and (rs1 == ID_EX_buff.rd or (rs2 == ID_EX_buff.rd and op2Select == 0) or (rs2 == ID_EX_buff.rd and MemOp == "w"))):
-        print("DECODE: stall1")
-        stall = 4
-        stallUp = 4
-        # ID_EX_buff.isStall = True
-        ID_EX_buff.flush()
-        return
+    if ( not hasDataForwarding):
+        if (stall == 0 and ALUOp != "-1" and ID_EX_buff.RFWrite == True and (rs1 == ID_EX_buff.rd or (rs2 == ID_EX_buff.rd and op2Select == 0) or (rs2 == ID_EX_buff.rd and MemOp == "w"))):
+            print("DECODE: stall1")
+            stall = 4
+            stallUp = 4
+            # ID_EX_buff.isStall = True
+            ID_EX_buff.flush()
+            return
     
-    if (stall == 0 and ALUOp != "-1" and EX_MEM_buff.RFWrite == True and (rs1 == EX_MEM_buff.rd or (rs2 == EX_MEM_buff.rd and op2Select == 0) or (rs2 == EX_MEM_buff.rd and MemOp == "w"))):
-        print("DECODE: stall2")
-        stall = 3
-        stallUp = 3
-        # ID_EX_buff.isStall = True
-        ID_EX_buff.flush()
-        return
+        if (stall == 0 and ALUOp != "-1" and EX_MEM_buff.RFWrite == True and (rs1 == EX_MEM_buff.rd or (rs2 == EX_MEM_buff.rd and op2Select == 0) or (rs2 == EX_MEM_buff.rd and MemOp == "w"))):
+            print("DECODE: stall2")
+            stall = 3
+            stallUp = 3
+            # ID_EX_buff.isStall = True
+            ID_EX_buff.flush()
+            return
     
-    if (stall == 0 and ALUOp != "-1" and MEM_WB_buff.RFWrite == True and (rs1 == MEM_WB_buff.rd or (rs2 == MEM_WB_buff.rd and op2Select == 0) or (rs2 == ID_EX_buff.rd and MemOp == "w"))):
-        print("DECODE: stall3")
+        if (stall == 0 and ALUOp != "-1" and MEM_WB_buff.RFWrite == True and (rs1 == MEM_WB_buff.rd or (rs2 == MEM_WB_buff.rd and op2Select == 0) or (rs2 == ID_EX_buff.rd and MemOp == "w"))):
+            print("DECODE: stall3")
+            stall = 2
+            stallUp = 2
+            # ID_EX_buff.isStall = True
+            ID_EX_buff.flush()
+            return
+    
+    # if (stall == 0 and ID_EX_buff.MemOp == 'r' and ALUOp != '-1' and (ID_EX_buff.rd == rs1 or (rs2 == ID_EX_buff.rd and op2Select == 0))):
+    #     print("DECODE: stall3")
+    #     stall = 2
+    #     stallUp = 2
+    #     # ID_EX_buff.isStall = True
+    #     ID_EX_buff.flush()
+    #     return    
+    
+    if (stall == 0 and ID_EX_buff.MemOp == 'r' and (ID_EX_buff.rd == rs1 or ID_EX_buff.rd == rs2)):
+        print("DECODE: stallIII")
         stall = 2
         stallUp = 2
-        # ID_EX_buff.isStall = True
-        ID_EX_buff.flush()
         return
     
-    
     operand1 = X[rs1]
+    op1 = X[rs1]
     op2 = X[rs2]
     
     # selecting the operand2 based on op2Select
@@ -834,6 +852,7 @@ def decode_p():
     ID_EX_buff.operation = operation
     ID_EX_buff.rd = rd
     ID_EX_buff.resultSelect = resultSelect
+    ID_EX_buff.op2Select = op2Select
     ID_EX_buff.RFWrite = RFWrite
     ID_EX_buff.rs1 = rs1
     ID_EX_buff.rs2 = rs2
@@ -881,7 +900,7 @@ def execute_np():
 
 
 def execute_p():
-    global btb, isFlush, PC_on_missprediction, ID_EX_buff, EX_MEM_buff, ALUResult, isBranch, branchTargetAddress
+    global btb, isFlush, PC_on_missprediction, ID_EX_buff, EX_MEM_buff, ALUResult, isBranch, branchTargetAddress, stall, stallUp
 
     bufferInfo = ID_EX_buff.getInfo()
 
@@ -890,6 +909,78 @@ def execute_p():
         # EX_MEM_buff.isStall = True
         EX_MEM_buff.flush()
         return
+    
+    print("rs1: ", bufferInfo["rs1"], "     rs2: ", bufferInfo["rs2"])
+    ex_operand1 = bufferInfo["operand1"]
+    ex_operand2 = 0
+    ex_rs2_value = bufferInfo["op2"]
+
+    if (hasDataForwarding):
+        f_rs1 = 0
+        f_rs2 = 0
+        f_alu_mem = 0
+
+
+        # if (stall == 0 and EX_MEM_buff.MemOp == 'r' and (EX_MEM_buff.rd == bufferInfo["rs1"] or EX_MEM_buff.rd == bufferInfo["rs2"])):
+        #     stall = 2
+        #     stallUp = 2
+        #     return
+    
+        if (EX_MEM_buff.RFWrite and EX_MEM_buff.rd != 0 and EX_MEM_buff.rd == bufferInfo["rs1"] and EX_MEM_buff.MemOp != 'r'):
+            f_rs1 = 1
+            print("path 1")
+            # ex_operand1 = EX_MEM_buff.ALUResult
+        elif (temp_MEM_WB_buff.RFWrite and temp_MEM_WB_buff.rd != 0 and temp_MEM_WB_buff.rd == bufferInfo["rs1"]):
+            f_rs1 = 2
+            print("path 2")
+            if (temp_MEM_WB_buff.MemOp == 'r'):
+                f_alu_mem = 1
+                f_rs1 = 3
+        else:
+            print("No path1")
+
+        if (EX_MEM_buff.RFWrite and EX_MEM_buff.rd != 0 and EX_MEM_buff.rd == bufferInfo["rs2"] and EX_MEM_buff.MemOp != 'r'):
+            # ex_rs2_value = EX_MEM_buff.ALUResult
+            f_rs2 = 1
+            print("path 3")
+
+        elif (temp_MEM_WB_buff.RFWrite and temp_MEM_WB_buff.rd != 0 and temp_MEM_WB_buff.rd == bufferInfo["rs2"]):
+            f_rs2 = 2
+            print("path 4")
+            if (temp_MEM_WB_buff.MemOp == 'r'):
+                f_alu_mem = 1
+                f_rs2 = 3
+        else:
+            print("No path 2")
+
+        if (f_rs1 == 0):
+            ex_operand1 = bufferInfo["op1"]
+        elif (f_rs1 == 1):
+            ex_operand1 = EX_MEM_buff.ALUResult
+        elif (f_rs1 == 2):
+            ex_operand1 = temp_MEM_WB_buff.ALUResult
+        else:
+            ex_operand1 = temp_MEM_WB_buff.loadData
+    
+        if (f_rs2 == 0):
+            ex_rs2_value = bufferInfo["op2"]
+        elif (f_rs2 == 1):
+            ex_rs2_value = EX_MEM_buff.ALUResult
+        elif (f_rs2 == 2):
+            ex_rs2_value = temp_MEM_WB_buff.ALUResult
+        else:
+            ex_rs2_value = temp_MEM_WB_buff.loadData
+
+
+    if (bufferInfo["op2Select"] == 0):
+        ex_operand2 = ex_rs2_value
+    elif (bufferInfo["op2Select"] == 1):
+        ex_operand2 = bufferInfo["immI"]
+    else:
+        ex_operand2 = bufferInfo["immS"]
+
+    
+    
 
 
     # if (bufferInfo["isEnd"]):
@@ -899,9 +990,11 @@ def execute_p():
 
 
     if (bufferInfo["ALUOp"] != "-1"):
-        ALUUnit = functions.ALU(bufferInfo["ALUOp"], bufferInfo["operand1"], bufferInfo["operand2"])
+        # ALUUnit = functions.ALU(bufferInfo["ALUOp"], bufferInfo["operand1"], bufferInfo["operand2"])
+        ALUUnit = functions.ALU(bufferInfo["ALUOp"], ex_operand1, ex_operand2)
         ALUResult = ALUUnit.compute()
-        print(f"EXECUTE: {bufferInfo['ALUOp']} 0x{bufferInfo['operand1']:08x} and 0x{bufferInfo['operand2']:08x}")
+        # print(f"EXECUTE: {bufferInfo['ALUOp']} 0x{bufferInfo['operand1']:08x} and 0x{bufferInfo['operand2']:08x}")
+        print(f"EXECUTE: {bufferInfo['ALUOp']} 0x{ex_operand1:08x} and 0x{ex_operand2:08x}")
     else:
         print(f"EXECUTE: No ALU operation")
 
@@ -957,7 +1050,8 @@ def execute_p():
     EX_MEM_buff.isBranch = isBranch
     EX_MEM_buff.Mem_b_h_w = bufferInfo["Mem_b_h_w"]
     EX_MEM_buff.MemOp = bufferInfo["MemOp"]
-    EX_MEM_buff.op2 = bufferInfo["op2"]
+    # EX_MEM_buff.op2 = bufferInfo["op2"]
+    EX_MEM_buff.op2 = ex_rs2_value
     EX_MEM_buff.immU = bufferInfo["immU"]
     EX_MEM_buff.pc_immU = pc_immU
     EX_MEM_buff.rd = bufferInfo["rd"]
@@ -992,7 +1086,7 @@ def mem_np():
         print("MEMORY: No memory operation")
 
 def mem_p():
-    global EX_MEM_buff, MEM_WB_buff, data_MEM, MemOp, ALUResult, Mem_b_h_w, loadData, op2
+    global temp_MEM_WB_buff, EX_MEM_buff, MEM_WB_buff, data_MEM, MemOp, ALUResult, Mem_b_h_w, loadData, op2
 
     bufferInfo = EX_MEM_buff.getInfo()
 
@@ -1007,7 +1101,13 @@ def mem_p():
     #     MEM_WB_buff.isEnd = True
     #     return
     
-
+    if (hasDataForwarding):
+        
+        if (bufferInfo["MemOp"] == 'w' and MEM_WB_buff.RFWrite and MEM_WB_buff.rd == bufferInfo["rd"]):
+            if (MEM_WB_buff.MemOp == 'r'):
+                bufferInfo["op2"] = MEM_WB_buff.loadData
+            else:
+                bufferInfo["op2"] = MEM_WB_buff.ALUResult
     
     if (bufferInfo["MemOp"] == "r"):
         if (bufferInfo["Mem_b_h_w"] == "b"):
@@ -1030,6 +1130,8 @@ def mem_p():
     else:
         print("MEMORY: No memory operation")
 
+    temp_MEM_WB_buff.copy(MEM_WB_buff)
+
     MEM_WB_buff.ALUResult = bufferInfo["ALUResult"]
     MEM_WB_buff.immU = bufferInfo["immU"]
     MEM_WB_buff.pc_immU = bufferInfo["pc_immU"]
@@ -1038,6 +1140,7 @@ def mem_p():
     MEM_WB_buff.rd = bufferInfo["rd"]
     MEM_WB_buff.resultSelect = bufferInfo["resultSelect"]
     MEM_WB_buff.RFWrite = bufferInfo["RFWrite"]
+    MEM_WB_buff.MemOp = bufferInfo["MemOp"]
     MEM_WB_buff.isStall = False
 
 
