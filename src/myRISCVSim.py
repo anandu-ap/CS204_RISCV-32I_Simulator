@@ -67,8 +67,12 @@ isLastIns = False
 stallUp = -1
 
 # input knobs
-isPipelined = False
-hasDataForwarding = False
+knob1 = False
+knob2 = False
+knob3 = False
+knob4 = False
+knob5 = 0
+PC_of_target_ins = -1
 
 
 # inter stage buffers
@@ -83,21 +87,40 @@ temp_MEM_WB_buff = st.MEM_WB_Pipeline_Registers()
 # Branch Target buffer
 btb = st.BTB()
 
+stats = st.Stats()
+
 
 def run_riscvsim():
-    global PC, clock, isFlush, PC_on_missprediction, IF_ID_buff, ID_EX_buff, isExit, isLastIns, isPipelined
+    global stats, PC, clock, isFlush, PC_on_missprediction, IF_ID_buff, ID_EX_buff, EX_MEM_buff, MEM_WB_buff,isExit, isLastIns, knob1
 
-    if (isPipelined):
+    if (knob1):
         # in case of pipelined implemetation
         while(isExit == False):
             write_back_p()
+            if (MEM_WB_buff.PC == PC_of_target_ins):
+                MEM_WB_buff.printContents()
             mem_p()
+            if (EX_MEM_buff.PC == PC_of_target_ins):
+                MEM_WB_buff.printContents()
             execute_p()
+            if (ID_EX_buff.PC == PC_of_target_ins):
+                ID_EX_buff.printContents()
             decode_p()
+            if (IF_ID_buff.PC == PC_of_target_ins):
+                IF_ID_buff.printContents()
             fetch_p()
 
             clock += 1
             print("clock cycle : ", clock)
+
+            if (knob3):
+                print_RF()
+            
+            if (knob4):
+                IF_ID_buff.printContents()
+                ID_EX_buff.printContents()
+                EX_MEM_buff.printContents()
+                MEM_WB_buff.printContents()
             print("-------------------------------------------------------------------------------------------------\n")
 
             if (isFlush):
@@ -126,7 +149,7 @@ def run_riscvsim():
             print("clock cycle : ", clock)
             print("-------------------------------------------------------------------------------------------------\n")
 
-
+    stats.cycles = clock
     #call the exit method        
     swi_exit()
 
@@ -155,10 +178,13 @@ def reset_proc():
 # load_program_memory reads the input memory, and pupulates the instruction 
 # memory
 def load_program_memory(file_name):
-    global ins_MEM
+    global ins_MEM, PC_of_target_ins
+
     with open(file_name, "r") as fp:
         i = 0
         for line in fp:
+            if (i/4 == knob5-1):
+                PC_of_target_ins = i
             # address, ins = map(lambda x: int(x, 16), line.split())
             ins = int(line.strip()[2:], 16)
             write_word(ins_MEM, i, ins)
@@ -195,11 +221,21 @@ def write_data_memory():
 
 # should be called when instruction is swi_exit
 def swi_exit():
+    global stats
     write_data_memory()
+    stats.calculateCPI()
+    stats.printToFile()
     # write_ins_memory()
     print("Completed writting data to data_out.mem")
     print("Program finished")
     exit(0)
+
+def print_RF():
+    global X
+
+    print("\nRegister File\n")
+    for i in range(32):
+        print(f"X{i} : 0x{X[i]:08x}")
 
 
 # reads from the instruction memory and updates the instruction register
@@ -217,10 +253,10 @@ def fetch_np():
     nextPC = PC + 4
 
 def fetch_p():
-    global out_file, stallUp, isLastIns, stall, ins_MEM, PC, instruction_word, isExit, nextPC, IF_ID_buff, isEnd
+    global stats, stallUp, isLastIns, stall, ins_MEM, PC, instruction_word, isExit, nextPC, IF_ID_buff, isEnd
 
     if (stall > 1 and stall < stallUp):
-        print("FETCH: stall")
+        print("FETCH: stalled")
         # out_file.write("FETCH:")
         stall -= 1
         return
@@ -231,14 +267,14 @@ def fetch_p():
     # if (isEnd):
     #     print("FETCH: No Operation")
     if (isLastIns):
-        print("FETCH: No Operation end")
+        print("FETCH: Already fetched last instruction")
 
     else:
         instruction_word = read_word(PC, ins_MEM)
-        print(f"FETCH:Fetch instruction 0x{instruction_word:08x} from address {hex(PC)}")
+        print(f"FETCH:Fetch instruction 0x{instruction_word:08x} from address 0x{PC:08x}")
 
         if (stall == stallUp):
-                print("stall")
+                print("stalled")
                 stall -= 1
                 return
     
@@ -251,6 +287,8 @@ def fetch_p():
         else:
             nextPC = PC + 4
             IF_ID_buff.PC = PC
+
+            stats.instructions += 1
 
             if (btb.hasPC(PC)):
                 tar = btb.getTargetAddress(PC)
@@ -529,7 +567,7 @@ def decode_p():
     global stallUp, stall, IF_ID_buff, ID_EX_buff, rd, rs1, rs2, op1, op2, operand1, operand2,op2Select, instruction_word, X, MemOp,Mem_b_h_w, operation, resultSelect, RFWrite, immB, immI, immJ, immS, immU, branchTargetSelect, resultSelect, ALUOp, isExit
 
     if (stall > 1):
-        print("DECODE: stall")
+        print("DECODE: stalled")
         return
     
     bufferInfo = IF_ID_buff.getInfo()
@@ -779,14 +817,14 @@ def decode_p():
     
     # Condition for data dependency
     # print("DP Var : stall = ", stall, " ALUOp: ", ALUOp, " IDEXBuff.RFWrite: ", ID_EX_buff.RFWrite, " rs1: ", rs1, " rs2: ", rs2, " op2select: ", op2Select)
-    if ( not hasDataForwarding):
-        if (stall == 0 and ALUOp != "-1" and ID_EX_buff.RFWrite == True and (rs1 == ID_EX_buff.rd or (rs2 == ID_EX_buff.rd and op2Select == 0) or (rs2 == ID_EX_buff.rd and MemOp == "w"))):
-            print("DECODE: stall1")
-            stall = 4
-            stallUp = 4
-            # ID_EX_buff.isStall = True
-            ID_EX_buff.flush()
-            return
+    if ( not knob2):
+        # if (stall == 0 and ALUOp != "-1" and ID_EX_buff.RFWrite == True and (rs1 == ID_EX_buff.rd or (rs2 == ID_EX_buff.rd and op2Select == 0) or (rs2 == ID_EX_buff.rd and MemOp == "w"))):
+        #     print("DECODE: stall1")
+        #     stall = 3
+        #     stallUp = 3
+        #     # ID_EX_buff.isStall = True
+        #     ID_EX_buff.flush()
+        #     return
     
         if (stall == 0 and ALUOp != "-1" and EX_MEM_buff.RFWrite == True and (rs1 == EX_MEM_buff.rd or (rs2 == EX_MEM_buff.rd and op2Select == 0) or (rs2 == EX_MEM_buff.rd and MemOp == "w"))):
             print("DECODE: stall2")
@@ -794,6 +832,7 @@ def decode_p():
             stallUp = 3
             # ID_EX_buff.isStall = True
             ID_EX_buff.flush()
+            stats.instructions -= 1
             return
     
         if (stall == 0 and ALUOp != "-1" and MEM_WB_buff.RFWrite == True and (rs1 == MEM_WB_buff.rd or (rs2 == MEM_WB_buff.rd and op2Select == 0) or (rs2 == ID_EX_buff.rd and MemOp == "w"))):
@@ -802,6 +841,7 @@ def decode_p():
             stallUp = 2
             # ID_EX_buff.isStall = True
             ID_EX_buff.flush()
+            stats.instructions -= 1
             return
     
     # if (stall == 0 and ID_EX_buff.MemOp == 'r' and ALUOp != '-1' and (ID_EX_buff.rd == rs1 or (rs2 == ID_EX_buff.rd and op2Select == 0))):
@@ -813,9 +853,12 @@ def decode_p():
     #     return    
     
     if (stall == 0 and ID_EX_buff.MemOp == 'r' and (ID_EX_buff.rd == rs1 or ID_EX_buff.rd == rs2)):
-        print("DECODE: stallIII")
+        print("DECODE: stalled")
         stall = 2
         stallUp = 2
+        #TODO
+        stats.data_hazards += 1
+        stats.instructions -= 1
         return
     
     operand1 = X[rs1]
@@ -900,7 +943,7 @@ def execute_np():
 
 
 def execute_p():
-    global btb, isFlush, PC_on_missprediction, ID_EX_buff, EX_MEM_buff, ALUResult, isBranch, branchTargetAddress, stall, stallUp
+    global stats, btb, isFlush, PC_on_missprediction, ID_EX_buff, EX_MEM_buff, ALUResult, isBranch, branchTargetAddress, stall, stallUp
 
     bufferInfo = ID_EX_buff.getInfo()
 
@@ -910,12 +953,12 @@ def execute_p():
         EX_MEM_buff.flush()
         return
     
-    print("rs1: ", bufferInfo["rs1"], "     rs2: ", bufferInfo["rs2"])
+    # print("rs1: ", bufferInfo["rs1"], "     rs2: ", bufferInfo["rs2"])
     ex_operand1 = bufferInfo["operand1"]
     ex_operand2 = 0
     ex_rs2_value = bufferInfo["op2"]
 
-    if (hasDataForwarding):
+    if (knob2):
         f_rs1 = 0
         f_rs2 = 0
         f_alu_mem = 0
@@ -928,48 +971,53 @@ def execute_p():
     
         if (EX_MEM_buff.RFWrite and EX_MEM_buff.rd != 0 and EX_MEM_buff.rd == bufferInfo["rs1"] and EX_MEM_buff.MemOp != 'r'):
             f_rs1 = 1
-            print("path 1")
             # ex_operand1 = EX_MEM_buff.ALUResult
         elif (temp_MEM_WB_buff.RFWrite and temp_MEM_WB_buff.rd != 0 and temp_MEM_WB_buff.rd == bufferInfo["rs1"]):
             f_rs1 = 2
-            print("path 2")
             if (temp_MEM_WB_buff.MemOp == 'r'):
                 f_alu_mem = 1
                 f_rs1 = 3
         else:
-            print("No path1")
-
+            pass
         if (EX_MEM_buff.RFWrite and EX_MEM_buff.rd != 0 and EX_MEM_buff.rd == bufferInfo["rs2"] and EX_MEM_buff.MemOp != 'r'):
             # ex_rs2_value = EX_MEM_buff.ALUResult
             f_rs2 = 1
-            print("path 3")
-
+            
         elif (temp_MEM_WB_buff.RFWrite and temp_MEM_WB_buff.rd != 0 and temp_MEM_WB_buff.rd == bufferInfo["rs2"]):
             f_rs2 = 2
-            print("path 4")
             if (temp_MEM_WB_buff.MemOp == 'r'):
                 f_alu_mem = 1
                 f_rs2 = 3
         else:
-            print("No path 2")
+            pass
 
         if (f_rs1 == 0):
             ex_operand1 = bufferInfo["op1"]
         elif (f_rs1 == 1):
             ex_operand1 = EX_MEM_buff.ALUResult
+            stats.data_hazards += 1
         elif (f_rs1 == 2):
             ex_operand1 = temp_MEM_WB_buff.ALUResult
+            stats.data_hazards += 1
         else:
             ex_operand1 = temp_MEM_WB_buff.loadData
-    
+            stats.data_hazards += 1
+
+        
         if (f_rs2 == 0):
             ex_rs2_value = bufferInfo["op2"]
         elif (f_rs2 == 1):
             ex_rs2_value = EX_MEM_buff.ALUResult
+            if (bufferInfo["op2Select"] == 0 and bufferInfo["rs1"] != bufferInfo["rs2"]):
+                stats.data_hazards += 1
         elif (f_rs2 == 2):
             ex_rs2_value = temp_MEM_WB_buff.ALUResult
+            if (bufferInfo["op2Select"] == 0 and bufferInfo["rs1"] != bufferInfo["rs2"]):
+                stats.data_hazards += 1
         else:
             ex_rs2_value = temp_MEM_WB_buff.loadData
+            if (bufferInfo["op2Select"] == 0 and bufferInfo["rs1"] != bufferInfo["rs2"]):
+                stats.data_hazards += 1
 
 
     if (bufferInfo["op2Select"] == 0):
@@ -979,22 +1027,12 @@ def execute_p():
     else:
         ex_operand2 = bufferInfo["immS"]
 
-    
-    
-
-
-    # if (bufferInfo["isEnd"]):
-    #     print("EXECUTE: No Operation")
-    #     EX_MEM_buff.isEnd = True
-    #     return
-
 
     if (bufferInfo["ALUOp"] != "-1"):
-        # ALUUnit = functions.ALU(bufferInfo["ALUOp"], bufferInfo["operand1"], bufferInfo["operand2"])
         ALUUnit = functions.ALU(bufferInfo["ALUOp"], ex_operand1, ex_operand2)
         ALUResult = ALUUnit.compute()
-        # print(f"EXECUTE: {bufferInfo['ALUOp']} 0x{bufferInfo['operand1']:08x} and 0x{bufferInfo['operand2']:08x}")
         print(f"EXECUTE: {bufferInfo['ALUOp']} 0x{ex_operand1:08x} and 0x{ex_operand2:08x}")
+        stats.ALU_ins += 1
     else:
         print(f"EXECUTE: No ALU operation")
 
@@ -1006,7 +1044,6 @@ def execute_p():
     
     if (bufferInfo["operation"] == "beq" or bufferInfo["operation"] == "bne" or bufferInfo["operation"] == "blt" or bufferInfo["operation"] == "bge"):
         if (not btb.hasPC(bufferInfo["PC"])):
-            print("EXECUTE:Hiiiiiiiiiiiiiiiiiiiiiiiiii\n")
             btb.addNewPC(bufferInfo["PC"], branchTargetAddress, 1)
         if (ALUResult == 1):
             isBranch = 1
@@ -1014,12 +1051,18 @@ def execute_p():
                 isFlush = True
                 PC_on_missprediction = branchTargetAddress
                 btb.updateisTaken(bufferInfo["PC"], True)
+                stats.branch_mispredictions += 1
+                stats.instructions -= 2
         else:
             isBranch = 0
             if (ID_EX_buff.branchTaken):
                 isFlush = True
                 PC_on_missprediction = ID_EX_buff.nextPC
                 btb.updateisTaken(bufferInfo["PC"], False)
+                stats.branch_mispredictions += 1
+                stats.instructions -= 2
+
+        stats.control_ins += 1
                 
     elif (bufferInfo["operation"] == "jal"):
         isBranch = 1
@@ -1029,6 +1072,9 @@ def execute_p():
         if (not ID_EX_buff.branchTaken):
             isFlush = True
             PC_on_missprediction = branchTargetAddress
+            stats.branch_mispredictions += 1
+            stats.instructions -= 2
+        stats.control_ins += 1
 
     elif (bufferInfo["operation"] == "jalr"):
         isBranch = 2
@@ -1039,6 +1085,9 @@ def execute_p():
             isFlush = True
             PC_on_missprediction = ALUResult
             btb.updateTargetAddr(bufferInfo["PC"], ALUResult)
+            stats.branch_mispredictions += 1
+            stats.instructions -= 2
+        stats.control_ins += 1
     else:
         isBranch = 0
 
@@ -1062,7 +1111,7 @@ def execute_p():
 
 # perform the memory operation
 def mem_np():
-    global data_MEM, MemOp, ALUResult, Mem_b_h_w, loadData, op2
+    global stats, data_MEM, MemOp, ALUResult, Mem_b_h_w, loadData, op2
 
     if (MemOp == "r"):
         if (Mem_b_h_w == "b"):
@@ -1073,6 +1122,8 @@ def mem_np():
             loadData = read_word(ALUResult, data_MEM)
         print(f"MEMORY: READ 0x{loadData:08x} from address 0x{ALUResult:08x}")
 
+        stats.data_transfers += 1
+
     elif (MemOp == "w"):
         if (Mem_b_h_w == "b"):
             write_byte(data_MEM, ALUResult, op2)
@@ -1081,17 +1132,18 @@ def mem_np():
         else:
             write_word(data_MEM, ALUResult, op2)
         print(f"MEMORY: WRITE 0x{op2:08x} to address 0x{ALUResult:08x}")
+        stats.data_transfers += 1
         
     else:
         print("MEMORY: No memory operation")
 
 def mem_p():
-    global temp_MEM_WB_buff, EX_MEM_buff, MEM_WB_buff, data_MEM, MemOp, ALUResult, Mem_b_h_w, loadData, op2
+    global stats, temp_MEM_WB_buff, EX_MEM_buff, MEM_WB_buff, data_MEM, MemOp, ALUResult, Mem_b_h_w, loadData, op2
 
     bufferInfo = EX_MEM_buff.getInfo()
 
     if (bufferInfo["isStall"]):
-        print("MEMORY: stall")
+        print("MEMORY: stalled")
         # MEM_WB_buff.isStall = True
         MEM_WB_buff.flush()
         return
@@ -1101,13 +1153,14 @@ def mem_p():
     #     MEM_WB_buff.isEnd = True
     #     return
     
-    if (hasDataForwarding):
+    if (knob2):
         
         if (bufferInfo["MemOp"] == 'w' and MEM_WB_buff.RFWrite and MEM_WB_buff.rd == bufferInfo["rd"]):
             if (MEM_WB_buff.MemOp == 'r'):
                 bufferInfo["op2"] = MEM_WB_buff.loadData
             else:
                 bufferInfo["op2"] = MEM_WB_buff.ALUResult
+            stats.data_hazards += 1
     
     if (bufferInfo["MemOp"] == "r"):
         if (bufferInfo["Mem_b_h_w"] == "b"):
@@ -1118,6 +1171,8 @@ def mem_p():
             loadData = read_word(bufferInfo["ALUResult"], data_MEM)
         print(f"MEMORY: READ 0x{loadData:08x} from address 0x{bufferInfo['ALUResult']:08x}")
 
+        stats.data_transfers += 1
+
     elif (bufferInfo["MemOp"] == "w"):
         if (bufferInfo["Mem_b_h_w"] == "b"):
             write_byte(data_MEM, bufferInfo["ALUResult"], bufferInfo["op2"])
@@ -1127,6 +1182,7 @@ def mem_p():
             write_word(data_MEM, bufferInfo["ALUResult"], bufferInfo["op2"])
         print(f"MEMORY: WRITE 0x{bufferInfo['op2']:08x} to address 0x{bufferInfo['ALUResult']:08x}")
         
+        stats.data_transfers += 1
     else:
         print("MEMORY: No memory operation")
 
@@ -1147,7 +1203,9 @@ def mem_p():
 
 # writes the results back to register file
 def write_back_np():
-    global PC, immU, loadData, ALUResult, RFWrite, resultSelect, rd, X, nextPC, pc_immU
+    global stats, PC, immU, loadData, ALUResult, RFWrite, resultSelect, rd, X, nextPC, pc_immU
+
+    stats.instructions += 1
 
     if (RFWrite):
         if (rd != 0):
@@ -1172,18 +1230,13 @@ def write_back_np():
         print("WRITEBACK: No operation")
 
 def write_back_p():
-    global isExit, MEM_WB_buff, PC, immU, loadData, ALUResult, RFWrite, resultSelect, rd, X, nextPC, pc_immU
+    global stats, isExit, MEM_WB_buff, PC, immU, loadData, ALUResult, RFWrite, resultSelect, rd, X, nextPC, pc_immU
 
     bufferInfo = MEM_WB_buff.getInfo()
 
     if (bufferInfo["isStall"]):
         print("WRITEBACK: stall")
         return
-
-    # if (bufferInfo["isEnd"]):
-    #     print("WRITEBACK: No Operation")
-    #     isExit = True
-    #     return
 
     if (bufferInfo["RFWrite"]):
         if (bufferInfo["rd"] != 0):
