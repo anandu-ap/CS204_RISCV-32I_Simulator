@@ -11,6 +11,20 @@ class IF_ID_Pipeline_Registers:
         self.predictedPC = 0
         self.isEmpty = True
 
+    def printContents(self):
+        print("\nIF_ID_Pipeline_Registers\n")
+
+        print(f"instruction word:{self.instruction_word}")
+        print(f"nextPC: {self.nextPC}")
+        print(f"isEnd: {self.isEnd}")
+        print(f"isStall: {self.isStall}")
+        print(f"branchTaken: {self.branchTaken}")
+        print(f"currentPC: {self.PC}")
+        print(f"predictedPC: {self.predictedPC}")
+        print(f"isEmpty: {self.isEmpty}")
+
+        print("\n")
+
     def getInfo(self):
         return {
             "instruction_word":self.instruction_word,
@@ -65,6 +79,40 @@ class ID_EX_Pipeline_Registers:
         self.branchTaken = True
         self.isEmpty = True
 
+    def printContents(self):
+        print("\nID_EX_Pipeline_Registers\n")
+
+        print(f"operand1:{self.operand1}")
+        print(f"operand2: {self.operand2}")
+        print(f"op1: {self.op1}")
+        print(f"op2: {self.op2}")
+        print(f"rd: {self.rd}")
+        print(f"rs1: {self.rs1}")
+        print(f"rs2: {self.rs2}")
+        print(f"immB: {self.immB}")
+        print(f"immJ: {self.immJ}")
+        print(f"immI: {self.immI}")
+        print(f"immS: {self.immS}")
+        print(f"immU: {self.immU}")
+        print(f"nextPC: {self.nextPC}")
+        print(f"PC: {self.PC}")
+        print(f"predictedPC: {self.predictedPC}")
+        
+        print(f"op2Select: {self.op2Select}")
+        print(f"ALUOp: {self.ALUOp}")
+        print(f"operation: {self.operation}")
+        print(f"MemOp: {self.MemOp}")
+        print(f"Mem_b_h_w: {self.Mem_b_h_w}")
+        print(f"resultSelect: {self.resultSelect}")
+        print(f"RFWrite: {self.RFWrite}")
+        print(f"branchTargetSelect: {self.branchTargetSelect}")
+        print(f"isBranch: {self.isBranch}")
+        print(f"isEnd: {self.isEnd}")
+        print(f"isStall: {self.isEnd}")
+        print(f"branchTaken: {self.branchTaken}")
+        print(f"isEmpty: {self.isEmpty}")
+
+    
     def getInfo(self):
         return {
             "operand1": self.operand1,
@@ -139,6 +187,7 @@ class EX_MEM_Pipeline_Registers:
         self.pc_immU = 0
         self.op2 = 0
         self.rd = 0
+        self.PC = 0
 
         self.isBranch = 0
         self.MemOp = "-1"
@@ -149,6 +198,28 @@ class EX_MEM_Pipeline_Registers:
         self.isEnd = False
         self.isStall = True
         self.isEmpty = True
+
+    def printContents(self):
+        print("\nEX_MEM_Pipeline_Registers\n")
+
+        print(f"nextPC: {self.nextPC}")
+        print(f"ALUResult: {self.ALUResult}")
+        print(f"branchTargetAddress: {self.branchTargetAddress}")
+        print(f"immU: {self.immU}")
+        print(f"pc_immU: {self.pc_immU}")
+        print(f"op2: {self.op2}")
+        print(f"rd: {self.rd}")
+
+        print(f"isBranch: {self.isBranch}")
+        print(f"MemOp: {self.MemOp}")
+        print(f"Mem_b_h_w: {self.Mem_b_h_w}")
+        print(f"RFWrite: {self.RFWrite}")
+        print(f"resultSelect: {self.resultSelect}")
+        print(f"op2Select : {self.op2Select}")
+        print(f"isEnd: {self.isEnd}")
+        print(f"isStall: {self.isStall}")
+        print(f"isEmpty: {self.isEmpty}")
+
         
     def getInfo(self):
         return {
@@ -195,6 +266,7 @@ class MEM_WB_Pipeline_Registers:
         self.pc_immU = 0
         self.loadData = 0
         self.rd = 0
+        self.PC = 0
 
         self.RFWrite = False
         self.MemOp = "-1"
@@ -202,6 +274,23 @@ class MEM_WB_Pipeline_Registers:
         self.isEnd = False
         self.isStall = True
         self.isEmpty = True
+
+    def printContents(self):
+        print("\nMEM_WB_Pipeline_Registers\n")
+
+        print(f"nextPC: {self.nextPC}")
+        print(f"ALUResult: {self.ALUResult}")
+        print(f"immU: {self.immU}")
+        print(f"pc_immU: {self.pc_immU}")
+        print(f"loadData: {self.loadData}")
+        print(f"rd: {self.rd}")
+
+        print(f"RFWrite: {self.RFWrite}")
+        print(f"MemOp: {self.MemOp}")
+        print(f"resultSelect: {self.resultSelect}")
+        print(f"isEnd: {self.isEnd}")
+        print(f"isStall: {self.isStall}")
+        print(f"isEmpty: {self.isEmpty}")
 
     def getInfo(self):
         return {
@@ -280,11 +369,40 @@ class BTB:
         self.buff = {}
 
     
+class Stats:
+    def __init__(self):
+        self.cycles = 0
+        self.instructions = 0
+        self.CPI = 0
+        self.data_transfers = 0
+        self.ALU_ins = 0
+        self.control_ins = 0
+        self.stalls = 0
+        self.data_hazards = 0
+        self.control_hazards = 0
+        self.branch_mispredictions = 0
+        self.stalls_data_hazards = 0
+        self.stalls_control_hazards = 0
+    
+    def calculateCPI(self):
+        self.CPI = self.cycles/self.instructions
+    
+    def printToFile(self):
+        out_file = open("stats.mem", 'w')
 
+        out_file.write(f"Cycles : {self.cycles}\n\n")
+        out_file.write(f"Total instructions executed = {self.instructions}\n\n")
+        out_file.write(f"CPI = {self.CPI}\n\n")
+        out_file.write(f"Number of data transfer = {self.data_transfers}\n\n")
+        out_file.write(f"Number of ALU instructions executed = {self.ALU_ins}\n\n")
+        out_file.write(f"Number of Control instructions executed = {self.control_ins}\n\n")
+        out_file.write(f"Number of stalls = {self.stalls}\n\n")
+        out_file.write(f"Number of data hazards = {self.data_hazards}\n\n")
+        out_file.write(f"Number of control hazards = {self.control_hazards}\n\n")
+        out_file.write(f"Number of branch mispredictions = {self.branch_mispredictions}\n\n")
+        out_file.write(f"Number of stalls due to data hazards = {self.stalls_data_hazards}\n\n")
+        out_file.write(f"Number of stalls due to control hazards = {self.stalls_control_hazards}\n\n")
 
-
-        
-
-
+        out_file.close()
 
         

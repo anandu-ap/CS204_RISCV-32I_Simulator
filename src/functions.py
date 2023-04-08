@@ -9,31 +9,31 @@ class ALU:
     
     def compute(self):
         result = 0
-        if self.ALUOp == "add":
+        if self.ALUOp == 0:
             result = self.fun_add()
-        elif self.ALUOp == "sub":
+        elif self.ALUOp == 1:
             result = self.fun_sub()
-        elif self.ALUOp == "xor":
+        elif self.ALUOp == 2:
             result = self.fun_xor()
-        elif self.ALUOp == "or":
+        elif self.ALUOp == 3:
             result = self.fun_or()
-        elif self.ALUOp == "and":
+        elif self.ALUOp == 4:
             result = self.fun_and()
-        elif self.ALUOp == "sll":
+        elif self.ALUOp == 5:
             result = self.fun_sll()
-        elif self.ALUOp == "srl":
+        elif self.ALUOp == 6:
             result = self.fun_srl()
-        elif self.ALUOp == "sra":
+        elif self.ALUOp == 7:
             result = self.fun_sra()
-        elif self.ALUOp == "slt":
+        elif self.ALUOp == 8:
             result = self.fun_slt()
-        elif self.ALUOp == "beq":
+        elif self.ALUOp == 9:
             result = self.fun_beq()
-        elif self.ALUOp == "bne":
+        elif self.ALUOp == 10:
             result = self.fun_bne()
-        elif self.ALUOp == "blt":
+        elif self.ALUOp == 11:
             result = self.fun_blt()
-        elif self.ALUOp == "bge":
+        elif self.ALUOp == 12:
             result = self.fun_bge()
         else:
             print("Some error occured")
@@ -86,7 +86,7 @@ class ALU:
     
 class Message:
     def __init__(self, operation, rd, rs1, rs2, operand1, operand2, immB, immJ, immU):
-        self.operation = operation
+        self.operation = self.reverseMap(operation)
         self.rd = rd
         self.rs1 = rs1
         self.rs2 = rs2
@@ -95,6 +95,69 @@ class Message:
         self.immB = immB
         self.immJ = immJ
         self.immU = immU
+
+    def reverseMap(self, operation):
+        if (operation == 0):
+            return "add"
+        elif (operation == 1):
+            return "sub"
+        elif (operation == 2):
+            return "xor"
+        elif (operation == 3):
+            return "or"
+        elif (operation == 4):
+            return "and"
+        elif (operation == 5):
+            return "sll"
+        elif (operation == 6):
+            return "srl"
+        elif (operation == 7):
+            return "sra"
+        elif (operation == 8):
+            return "slt"
+        elif (operation == 9):
+            return "addi"
+        elif (operation == 10):
+            return "xori"
+        elif (operation == 11):
+            return "ori"
+        elif (operation == 12):
+            return "andi"
+        elif (operation == 13):
+            return "slli"
+        elif (operation == 14):
+            return "srrli"
+        elif (operation == 15):
+            return "slti"
+        elif (operation == 16):
+            return "lb"
+        elif (operation == 17):
+            return "lh"
+        elif (operation == 18):
+            return "lw"
+        elif (operation == 19):
+            return "sb"
+        elif (operation == 20):
+            return "sh"
+        elif (operation == 21):
+            return "sw"
+        elif (operation == 22):
+            return "beq"
+        elif (operation == 23):
+            return "bne"
+        elif (operation == 24):
+            return "blt"
+        elif (operation == 25):
+            return "bge"
+        elif (operation == 26):
+            return "jal"
+        elif (operation == 27):
+            return "jalr"
+        elif (operation == 28):
+            return "lui"
+        elif (operation == 29):
+            return "auipc"
+        return ""
 
     def printMsg(self):
         if (self.operation == "add" or self.operation == "sub" or self.operation == "xor" or self.operation == "or" or self.operation == "and" or self.operation == "sll" or self.operation == "srl" or self.operation == "sra" or self.operation == "slt"):

@@ -211,13 +211,6 @@ def write_data_memory():
             value = value & 0xffffffff
             fp.write(f"0x{key:08x} 0x{value:08x}\n")
 
-# def write_ins_memory():
-#     global data_MEM, X
-#     with open("ins_out.mem", "w") as fp:
-#         for key, value in sorted(ins_MEM.items()):
-#             value = value & 0xffffffff
-#             fp.write(f"0x{key:08x} 0x{value:08x}\n")
-
 
 # should be called when instruction is swi_exit
 def swi_exit():
@@ -288,7 +281,7 @@ def fetch_p():
             nextPC = PC + 4
             IF_ID_buff.PC = PC
 
-            stats.instructions += 1
+            # stats.instructions += 1
 
             if (btb.hasPC(PC)):
                 tar = btb.getTargetAddress(PC)
@@ -307,11 +300,9 @@ def fetch_p():
             IF_ID_buff.isStall = False
             IF_ID_buff.predictedPC = PC
 
-
-
 # reads the instruction register, reads operand1, operand2 from register file, decides the operation to be performed in execute stage
 def decode_np():
-    global isBranch, rd, rs1, rs2, op1, op2, operand1, operand2,op2Select, instruction_word, X, MemOp,Mem_b_h_w, operation, resultSelect, RFWrite, immB, immI, immJ, immS, immU, branchTargetSelect, resultSelect, ALUOp, isExit
+    global stats, isBranch, rd, rs1, rs2, op1, op2, operand1, operand2,op2Select, instruction_word, X, MemOp,Mem_b_h_w, operation, resultSelect, RFWrite, immB, immI, immJ, immS, immU, branchTargetSelect, resultSelect, ALUOp, isExit
 
     instruction_in_binary = bin(instruction_word)[2:].zfill(32)
     opcode = instruction_in_binary[25:32]
@@ -355,36 +346,36 @@ def decode_np():
         # R type
         op2Select = 0
         resultSelect = 4
-        MemOp = "-1"
+        MemOp = 0
         RFWrite = True
 
         if (fun3 == "000" and fun7 == "0000000"):
-            operation = "add"
-            ALUOp = "add"
+            operation = 0
+            ALUOp = 0
         elif (fun3 == "000" and fun7 == "0100000"):
-            operation = "sub"
-            ALUOp = "sub"
+            operation = 1
+            ALUOp = 1
         elif (fun3 == "100" and "0000000"):
-            operation = "xor"
-            ALUOp = "xor"
+            operation = 2
+            ALUOp = 2
         elif (fun3 == "110" and fun7 == "0000000"):
-            operation = "or"
-            ALUOp = "or"
+            operation = 3
+            ALUOp = 3
         elif (fun3 == "111" and fun7 == "0000000"):
-            operation = "and"
-            ALUOp = "and"
+            operation = 4
+            ALUOp = 4
         elif (fun3 == "001" and fun7 == "0000000"):
-            operation = "sll"
-            ALUOp = "sll"
+            operation = 5
+            ALUOp = 5
         elif (fun3 == "101" and fun7 == "0000000"):
-            operation = "srl"
-            ALUOp = "srl"
+            operation = 6
+            ALUOp = 6
         elif (fun3 == "101" and fun7 == "0100000"):
-            operation = "sra"
-            ALUOp = "sra"
+            operation = 7
+            ALUOp = 7
         elif (fun3 == "010" and fun7 == "0000000"):
-            operation = "slt"
-            ALUOp = "slt"
+            operation = 8
+            ALUOp = 8
         else:
             print("Instruction not supported")
             swi_exit()
@@ -395,24 +386,24 @@ def decode_np():
 
         op2Select = 1
         resultSelect = 4
-        MemOp = "-1"
+        MemOp = 0
         RFWrite = True
 
         if (fun3 == "000"):
-            operation = "addi"
-            ALUOp = "add"
+            operation = 9
+            ALUOp = 0
         elif (fun3 == "100"):
-            operation = "xori"
-            ALUOp = "xor"
+            operation = 10
+            ALUOp = 2
         elif (fun3 == "110"):
-            operation = "ori"
-            ALUOp = "or"
+            operation = 11
+            ALUOp = 3
         elif (fun3 == "111"):
-            operation = "andi"
-            ALUOp = "and"
+            operation = 12
+            ALUOp = 4
         elif (fun3 == "001"):
-            operation = "slli"
-            ALUOp = "sll"
+            operation = 13
+            ALUOp = 5
         elif (fun3 == "101"):
             # if (instruction_in_binary[0:7] == "000000"):
             #     operation = "srli"
@@ -420,11 +411,11 @@ def decode_np():
             # else:
             #     operation = "srai"
             #     ALUOp = "sra"
-            operation = "srli"
-            ALUOp = "srl"
+            operation = 14
+            ALUOp = 6
         elif (fun3 == "010"):
-            operation = "slti"
-            ALUOp = "slt"
+            operation = 15
+            ALUOp = 8
         else:
             print("Instruction not supported")
             swi_exit()
@@ -435,19 +426,19 @@ def decode_np():
 
         op2Select = 1
         resultSelect = 3
-        MemOp = "r"
+        MemOp = 1
         RFWrite = True
-        ALUOp = "add"
+        ALUOp = 0
 
         if (fun3 == "000"):
-            operation = "lb"
-            Mem_b_h_w = "b"
+            operation = 16
+            Mem_b_h_w = 0
         elif (fun3 == "001"):
-            operation = "lh"
-            Mem_b_h_w = "h"
+            operation = 17
+            Mem_b_h_w = 1
         elif (fun3 == "010"):
-            operation = "lw"
-            Mem_b_h_w = "w"
+            operation = 18
+            Mem_b_h_w = 2
         else:
             print("Instruction not supported")
             swi_exit()
@@ -457,19 +448,19 @@ def decode_np():
         # S type
         
         op2Select = 2
-        MemOp = "w"
+        MemOp = 2
         RFWrite = False
-        ALUOp = "add"
+        ALUOp = 0
 
         if (fun3 == "000"):
-            operation = "sb"
-            Mem_b_h_w = "b"
+            operation = 19
+            Mem_b_h_w = 0
         elif (fun3 == "001"):
-            operation = "sh"
-            Mem_b_h_w = "h"
+            operation = 20
+            Mem_b_h_w = 1
         elif (fun3 == "010"):
-            operation = "sw"
-            Mem_b_h_w = "w"
+            operation = 21
+            Mem_b_h_w = 2
         else:
             print("Instruction not supported")
             swi_exit()
@@ -479,21 +470,23 @@ def decode_np():
         # B type
         op2Select = 0
         branchTargetSelect = 0
-        MemOp = "-1"
+        MemOp = 0
         RFWrite = False
 
+        stats.control_ins += 1
+
         if (fun3 == "000"):
-            operation = "beq"
-            ALUOp = "beq"
+            operation = 22
+            ALUOp = 9
         elif (fun3 == "001"):
-            operation = "bne"
-            ALUOp = "bne"
+            operation = 23
+            ALUOp = 10
         elif (fun3 == "100"):
-            operation = "blt"
-            ALUOp = "blt"
+            operation = 24
+            ALUOp = 11
         elif (fun3 == "101"):
-            operation = "bge"
-            ALUOp = "bge"
+            operation = 25
+            ALUOp = 12
         else:
             print("Instruction not supported")
             swi_exit()
@@ -503,11 +496,13 @@ def decode_np():
         
         branchTargetSelect = 1
         resultSelect = 0
-        MemOp = "-1"
+        MemOp = 0
         RFWrite = True
-        ALUOp = "-1"
-        operation = "jal"
+        ALUOp = 15
+        operation = 26
         isBranch = 1
+
+        stats.control_ins += 1
 
 
     elif (opcode == "1100111"):
@@ -515,13 +510,15 @@ def decode_np():
         
         resultSelect = 0
         op2Select = 1
-        MemOp = "-1"
+        MemOp = 0
         RFWrite = True
-        ALUOp = "add"
+        ALUOp = 0
         isBranch = 2
 
+        stats.control_ins += 1
+
         if (fun3 == "000"):
-            operation = "jalr"
+            operation = 27
         else:
             print("Instruction not supported")
             swi_exit()
@@ -530,19 +527,19 @@ def decode_np():
         # U type (lui)
         
         resultSelect = 1
-        MemOp = "-1"
+        MemOp = 0
         RFWrite = True
-        operation = "lui"
-        ALUOp = "-1"
+        operation = 28
+        ALUOp = 15
 
     elif (opcode == "0010111"):
         # U type (auipc)
         
         resultSelect = 2
-        MemOp = "-1"
+        MemOp = 0
         RFWrite = True
-        operation = "auipc"
-        ALUOp = "-1"
+        operation = 29
+        ALUOp = 15
 
     else:
         print("Instruction not supported")
@@ -564,10 +561,11 @@ def decode_np():
     
     
 def decode_p():
-    global stallUp, stall, IF_ID_buff, ID_EX_buff, rd, rs1, rs2, op1, op2, operand1, operand2,op2Select, instruction_word, X, MemOp,Mem_b_h_w, operation, resultSelect, RFWrite, immB, immI, immJ, immS, immU, branchTargetSelect, resultSelect, ALUOp, isExit
+    global stats, stallUp, isBranch, stall, IF_ID_buff, ID_EX_buff, rd, rs1, rs2, op1, op2, operand1, operand2,op2Select, instruction_word, X, MemOp,Mem_b_h_w, operation, resultSelect, RFWrite, immB, immI, immJ, immS, immU, branchTargetSelect, resultSelect, ALUOp, isExit
 
     if (stall > 1):
         print("DECODE: stalled")
+        ID_EX_buff.flush()
         return
     
     bufferInfo = IF_ID_buff.getInfo()
@@ -618,40 +616,41 @@ def decode_p():
         immJ = int(imm, 2)
 
   
+    
     if (opcode == "0110011"):
         # R type
         op2Select = 0
         resultSelect = 4
-        MemOp = "-1"
+        MemOp = 0
         RFWrite = True
 
         if (fun3 == "000" and fun7 == "0000000"):
-            operation = "add"
-            ALUOp = "add"
+            operation = 0
+            ALUOp = 0
         elif (fun3 == "000" and fun7 == "0100000"):
-            operation = "sub"
-            ALUOp = "sub"
+            operation = 1
+            ALUOp = 1
         elif (fun3 == "100" and "0000000"):
-            operation = "xor"
-            ALUOp = "xor"
+            operation = 2
+            ALUOp = 2
         elif (fun3 == "110" and fun7 == "0000000"):
-            operation = "or"
-            ALUOp = "or"
+            operation = 3
+            ALUOp = 3
         elif (fun3 == "111" and fun7 == "0000000"):
-            operation = "and"
-            ALUOp = "and"
+            operation = 4
+            ALUOp = 4
         elif (fun3 == "001" and fun7 == "0000000"):
-            operation = "sll"
-            ALUOp = "sll"
+            operation = 5
+            ALUOp = 5
         elif (fun3 == "101" and fun7 == "0000000"):
-            operation = "srl"
-            ALUOp = "srl"
+            operation = 6
+            ALUOp = 6
         elif (fun3 == "101" and fun7 == "0100000"):
-            operation = "sra"
-            ALUOp = "sra"
+            operation = 7
+            ALUOp = 7
         elif (fun3 == "010" and fun7 == "0000000"):
-            operation = "slt"
-            ALUOp = "slt"
+            operation = 8
+            ALUOp = 8
         else:
             print("Instruction not supported")
             swi_exit()
@@ -662,24 +661,24 @@ def decode_p():
 
         op2Select = 1
         resultSelect = 4
-        MemOp = "-1"
+        MemOp = 0
         RFWrite = True
 
         if (fun3 == "000"):
-            operation = "addi"
-            ALUOp = "add"
+            operation = 9
+            ALUOp = 0
         elif (fun3 == "100"):
-            operation = "xori"
-            ALUOp = "xor"
+            operation = 10
+            ALUOp = 2
         elif (fun3 == "110"):
-            operation = "ori"
-            ALUOp = "or"
+            operation = 11
+            ALUOp = 3
         elif (fun3 == "111"):
-            operation = "andi"
-            ALUOp = "and"
+            operation = 12
+            ALUOp = 4
         elif (fun3 == "001"):
-            operation = "slli"
-            ALUOp = "sll"
+            operation = 13
+            ALUOp = 5
         elif (fun3 == "101"):
             # if (instruction_in_binary[0:7] == "000000"):
             #     operation = "srli"
@@ -687,11 +686,11 @@ def decode_p():
             # else:
             #     operation = "srai"
             #     ALUOp = "sra"
-            operation = "srli"
-            ALUOp = "srl"
+            operation = 14
+            ALUOp = 6
         elif (fun3 == "010"):
-            operation = "slti"
-            ALUOp = "slt"
+            operation = 15
+            ALUOp = 8
         else:
             print("Instruction not supported")
             swi_exit()
@@ -702,19 +701,19 @@ def decode_p():
 
         op2Select = 1
         resultSelect = 3
-        MemOp = "r"
+        MemOp = 1
         RFWrite = True
-        ALUOp = "add"
+        ALUOp = 0
 
         if (fun3 == "000"):
-            operation = "lb"
-            Mem_b_h_w = "b"
+            operation = 16
+            Mem_b_h_w = 0
         elif (fun3 == "001"):
-            operation = "lh"
-            Mem_b_h_w = "h"
+            operation = 17
+            Mem_b_h_w = 1
         elif (fun3 == "010"):
-            operation = "lw"
-            Mem_b_h_w = "w"
+            operation = 18
+            Mem_b_h_w = 2
         else:
             print("Instruction not supported")
             swi_exit()
@@ -724,19 +723,19 @@ def decode_p():
         # S type
         
         op2Select = 2
-        MemOp = "w"
+        MemOp = 2
         RFWrite = False
-        ALUOp = "add"
+        ALUOp = 0
 
         if (fun3 == "000"):
-            operation = "sb"
-            Mem_b_h_w = "b"
+            operation = 19
+            Mem_b_h_w = 0
         elif (fun3 == "001"):
-            operation = "sh"
-            Mem_b_h_w = "h"
+            operation = 20
+            Mem_b_h_w = 1
         elif (fun3 == "010"):
-            operation = "sw"
-            Mem_b_h_w = "w"
+            operation = 21
+            Mem_b_h_w = 2
         else:
             print("Instruction not supported")
             swi_exit()
@@ -746,21 +745,21 @@ def decode_p():
         # B type
         op2Select = 0
         branchTargetSelect = 0
-        MemOp = "-1"
+        MemOp = 0
         RFWrite = False
 
         if (fun3 == "000"):
-            operation = "beq"
-            ALUOp = "beq"
+            operation = 22
+            ALUOp = 9
         elif (fun3 == "001"):
-            operation = "bne"
-            ALUOp = "bne"
+            operation = 23
+            ALUOp = 10
         elif (fun3 == "100"):
-            operation = "blt"
-            ALUOp = "blt"
+            operation = 24
+            ALUOp = 11
         elif (fun3 == "101"):
-            operation = "bge"
-            ALUOp = "bge"
+            operation = 25
+            ALUOp = 12
         else:
             print("Instruction not supported")
             swi_exit()
@@ -770,10 +769,11 @@ def decode_p():
         
         branchTargetSelect = 1
         resultSelect = 0
-        MemOp = "-1"
+        MemOp = 0
         RFWrite = True
-        ALUOp = "-1"
-        operation = "jal"
+        ALUOp = 15
+        operation = 26
+        isBranch = 1
 
 
     elif (opcode == "1100111"):
@@ -781,12 +781,13 @@ def decode_p():
         
         resultSelect = 0
         op2Select = 1
-        MemOp = "-1"
+        MemOp = 0
         RFWrite = True
-        ALUOp = "add"
+        ALUOp = 0
+        isBranch = 2
 
         if (fun3 == "000"):
-            operation = "jalr"
+            operation = 27
         else:
             print("Instruction not supported")
             swi_exit()
@@ -795,26 +796,23 @@ def decode_p():
         # U type (lui)
         
         resultSelect = 1
-        MemOp = "-1"
+        MemOp = 0
         RFWrite = True
-        operation = "lui"
-        ALUOp = "-1"
+        operation = 28
+        ALUOp = 15
 
     elif (opcode == "0010111"):
         # U type (auipc)
         
         resultSelect = 2
-        MemOp = "-1"
+        MemOp = 0
         RFWrite = True
-        operation = "auipc"
-        ALUOp = "-1"
+        operation = 29
+        ALUOp = 15
 
     else:
-        print("Error! Instruction not supported")
+        print("Instruction not supported")
         isExit = True
-        return
-        # swi_exit()
-    
     # Condition for data dependency
     # print("DP Var : stall = ", stall, " ALUOp: ", ALUOp, " IDEXBuff.RFWrite: ", ID_EX_buff.RFWrite, " rs1: ", rs1, " rs2: ", rs2, " op2select: ", op2Select)
     if ( not knob2):
@@ -826,22 +824,26 @@ def decode_p():
         #     ID_EX_buff.flush()
         #     return
     
-        if (stall == 0 and ALUOp != "-1" and EX_MEM_buff.RFWrite == True and (rs1 == EX_MEM_buff.rd or (rs2 == EX_MEM_buff.rd and op2Select == 0) or (rs2 == EX_MEM_buff.rd and MemOp == "w"))):
+        if (stall == 0 and ALUOp != 15 and EX_MEM_buff.RFWrite == True and (rs1 == EX_MEM_buff.rd or (rs2 == EX_MEM_buff.rd and op2Select == 0) or (rs2 == EX_MEM_buff.rd and MemOp == 2))):
             print("DECODE: stall2")
             stall = 3
             stallUp = 3
             # ID_EX_buff.isStall = True
             ID_EX_buff.flush()
-            stats.instructions -= 1
+            stats.stalls += 2
+            stats.data_hazards += 1
+            stats.stalls_data_hazards += 2
             return
     
-        if (stall == 0 and ALUOp != "-1" and MEM_WB_buff.RFWrite == True and (rs1 == MEM_WB_buff.rd or (rs2 == MEM_WB_buff.rd and op2Select == 0) or (rs2 == ID_EX_buff.rd and MemOp == "w"))):
+        if (stall == 0 and ALUOp != 15 and MEM_WB_buff.RFWrite == True and (rs1 == MEM_WB_buff.rd or (rs2 == MEM_WB_buff.rd and op2Select == 0) or (rs2 == ID_EX_buff.rd and MemOp == 2))):
             print("DECODE: stall3")
             stall = 2
             stallUp = 2
             # ID_EX_buff.isStall = True
             ID_EX_buff.flush()
-            stats.instructions -= 1
+            stats.stalls += 1
+            stats.data_hazards += 1
+            stats.stalls_data_hazards += 1
             return
     
     # if (stall == 0 and ID_EX_buff.MemOp == 'r' and ALUOp != '-1' and (ID_EX_buff.rd == rs1 or (rs2 == ID_EX_buff.rd and op2Select == 0))):
@@ -852,13 +854,16 @@ def decode_p():
     #     ID_EX_buff.flush()
     #     return    
     
-    if (stall == 0 and ID_EX_buff.MemOp == 'r' and (ID_EX_buff.rd == rs1 or ID_EX_buff.rd == rs2)):
+    if (stall == 0 and ID_EX_buff.MemOp == 1 and (ID_EX_buff.rd == rs1 or ID_EX_buff.rd == rs2)):
         print("DECODE: stalled")
         stall = 2
         stallUp = 2
         #TODO
         stats.data_hazards += 1
-        stats.instructions -= 1
+        stats.stalls += 1
+        stats.stalls_data_hazards += 1
+        # ID_EX_buff.flush()
+        # stats.instructions -= 1
         return
     
     operand1 = X[rs1]
@@ -907,13 +912,14 @@ def decode_p():
   
 # executes the operations based on ALUOp
 def execute_np():
-    global PC, rd, op2, pc_immU, operand1, operand2, instruction_word, X, MemOp, operation, RFWrite, ALUResult, ALUOp, isBranch, immU, branchTargetSelect, branchTargetAddress
+    global stats, PC, rd, op2, pc_immU, operand1, operand2, instruction_word, X, MemOp, operation, RFWrite, ALUResult, ALUOp, isBranch, immU, branchTargetSelect, branchTargetAddress
 
     # performing the ALU operation
-    if (ALUOp != "-1"):
+    if (ALUOp != 15):
         ALUUnit = functions.ALU(ALUOp, operand1, operand2)
         ALUResult = ALUUnit.compute()
         print(f"EXECUTE: {ALUOp} 0x{operand1:08x} and 0x{operand2:08x}")
+        stats.ALU_ins += 1
     else:
         print(f"EXECUTE: No ALU operation")
 
@@ -924,7 +930,7 @@ def execute_np():
         branchTargetAddress = PC + immJ
     
     # deciding whether branch is taken or not
-    if (operation == "beq" or operation == "bne" or operation == "blt" or operation == "bge"):
+    if (operation == 22 or operation == 23 or operation == 24 or operation == 25):
         if (ALUResult == 1):
             isBranch = 1
         else:
@@ -940,6 +946,8 @@ def execute_np():
 
     # computing value of PC + immU    
     pc_immU = PC + immU
+
+    
 
 
 def execute_p():
@@ -958,34 +966,34 @@ def execute_p():
     ex_operand2 = 0
     ex_rs2_value = bufferInfo["op2"]
 
+    has_data_dependency = 0
+
     if (knob2):
         f_rs1 = 0
         f_rs2 = 0
-        f_alu_mem = 0
-
 
         # if (stall == 0 and EX_MEM_buff.MemOp == 'r' and (EX_MEM_buff.rd == bufferInfo["rs1"] or EX_MEM_buff.rd == bufferInfo["rs2"])):
         #     stall = 2
         #     stallUp = 2
         #     return
     
-        if (EX_MEM_buff.RFWrite and EX_MEM_buff.rd != 0 and EX_MEM_buff.rd == bufferInfo["rs1"] and EX_MEM_buff.MemOp != 'r'):
+        if (EX_MEM_buff.RFWrite and EX_MEM_buff.rd != 0 and EX_MEM_buff.rd == bufferInfo["rs1"] and EX_MEM_buff.MemOp != 1):
             f_rs1 = 1
             # ex_operand1 = EX_MEM_buff.ALUResult
         elif (temp_MEM_WB_buff.RFWrite and temp_MEM_WB_buff.rd != 0 and temp_MEM_WB_buff.rd == bufferInfo["rs1"]):
             f_rs1 = 2
-            if (temp_MEM_WB_buff.MemOp == 'r'):
+            if (temp_MEM_WB_buff.MemOp == 1):
                 f_alu_mem = 1
                 f_rs1 = 3
         else:
             pass
-        if (EX_MEM_buff.RFWrite and EX_MEM_buff.rd != 0 and EX_MEM_buff.rd == bufferInfo["rs2"] and EX_MEM_buff.MemOp != 'r'):
+        if (EX_MEM_buff.RFWrite and EX_MEM_buff.rd != 0 and EX_MEM_buff.rd == bufferInfo["rs2"] and EX_MEM_buff.MemOp != 1):
             # ex_rs2_value = EX_MEM_buff.ALUResult
             f_rs2 = 1
             
         elif (temp_MEM_WB_buff.RFWrite and temp_MEM_WB_buff.rd != 0 and temp_MEM_WB_buff.rd == bufferInfo["rs2"]):
             f_rs2 = 2
-            if (temp_MEM_WB_buff.MemOp == 'r'):
+            if (temp_MEM_WB_buff.MemOp == 1):
                 f_alu_mem = 1
                 f_rs2 = 3
         else:
@@ -995,40 +1003,41 @@ def execute_p():
             ex_operand1 = bufferInfo["op1"]
         elif (f_rs1 == 1):
             ex_operand1 = EX_MEM_buff.ALUResult
-            stats.data_hazards += 1
+            has_data_dependency = 1
         elif (f_rs1 == 2):
             ex_operand1 = temp_MEM_WB_buff.ALUResult
-            stats.data_hazards += 1
+            has_data_dependency = 1
         else:
             ex_operand1 = temp_MEM_WB_buff.loadData
-            stats.data_hazards += 1
+            has_data_dependency = 1
+
 
         
         if (f_rs2 == 0):
             ex_rs2_value = bufferInfo["op2"]
         elif (f_rs2 == 1):
             ex_rs2_value = EX_MEM_buff.ALUResult
-            if (bufferInfo["op2Select"] == 0 and bufferInfo["rs1"] != bufferInfo["rs2"]):
-                stats.data_hazards += 1
+            has_data_dependency = 1
         elif (f_rs2 == 2):
             ex_rs2_value = temp_MEM_WB_buff.ALUResult
-            if (bufferInfo["op2Select"] == 0 and bufferInfo["rs1"] != bufferInfo["rs2"]):
-                stats.data_hazards += 1
+            has_data_dependency = 1
         else:
             ex_rs2_value = temp_MEM_WB_buff.loadData
-            if (bufferInfo["op2Select"] == 0 and bufferInfo["rs1"] != bufferInfo["rs2"]):
-                stats.data_hazards += 1
+            has_data_dependency = 1
+
 
 
     if (bufferInfo["op2Select"] == 0):
         ex_operand2 = ex_rs2_value
+        if (knob2 and has_data_dependency == 1):
+            stats.data_hazards += 1
     elif (bufferInfo["op2Select"] == 1):
         ex_operand2 = bufferInfo["immI"]
     else:
         ex_operand2 = bufferInfo["immS"]
 
 
-    if (bufferInfo["ALUOp"] != "-1"):
+    if (bufferInfo["ALUOp"] != 15):
         ALUUnit = functions.ALU(bufferInfo["ALUOp"], ex_operand1, ex_operand2)
         ALUResult = ALUUnit.compute()
         print(f"EXECUTE: {bufferInfo['ALUOp']} 0x{ex_operand1:08x} and 0x{ex_operand2:08x}")
@@ -1042,7 +1051,7 @@ def execute_p():
         branchTargetAddress = bufferInfo["nextPC"] - 4 + bufferInfo["immJ"]
         
     
-    if (bufferInfo["operation"] == "beq" or bufferInfo["operation"] == "bne" or bufferInfo["operation"] == "blt" or bufferInfo["operation"] == "bge"):
+    if (bufferInfo["operation"] == 22 or bufferInfo["operation"] == 23 or bufferInfo["operation"] == 24 or bufferInfo["operation"] == 25):
         if (not btb.hasPC(bufferInfo["PC"])):
             btb.addNewPC(bufferInfo["PC"], branchTargetAddress, 1)
         if (ALUResult == 1):
@@ -1052,7 +1061,8 @@ def execute_p():
                 PC_on_missprediction = branchTargetAddress
                 btb.updateisTaken(bufferInfo["PC"], True)
                 stats.branch_mispredictions += 1
-                stats.instructions -= 2
+                stats.stalls_control_hazards += 2
+                # stats.instructions -= 2
         else:
             isBranch = 0
             if (ID_EX_buff.branchTaken):
@@ -1060,11 +1070,13 @@ def execute_p():
                 PC_on_missprediction = ID_EX_buff.nextPC
                 btb.updateisTaken(bufferInfo["PC"], False)
                 stats.branch_mispredictions += 1
-                stats.instructions -= 2
+                stats.stalls_control_hazards += 2
+                # stats.instructions -= 2
 
         stats.control_ins += 1
+        stats.control_hazards += 1
                 
-    elif (bufferInfo["operation"] == "jal"):
+    elif (bufferInfo["operation"] == 26):
         isBranch = 1
         if (not btb.hasPC(bufferInfo["PC"])):
             btb.addNewPC(bufferInfo["PC"], branchTargetAddress, 3)
@@ -1073,10 +1085,11 @@ def execute_p():
             isFlush = True
             PC_on_missprediction = branchTargetAddress
             stats.branch_mispredictions += 1
-            stats.instructions -= 2
+            stats.stalls_control_hazards += 2
+            # stats.instructions -= 2
         stats.control_ins += 1
 
-    elif (bufferInfo["operation"] == "jalr"):
+    elif (bufferInfo["operation"] == 27):
         isBranch = 2
         if (not btb.hasPC(bufferInfo["PC"])):
             btb.addNewPC(bufferInfo["PC"], ALUResult, 3)
@@ -1086,7 +1099,8 @@ def execute_p():
             PC_on_missprediction = ALUResult
             btb.updateTargetAddr(bufferInfo["PC"], ALUResult)
             stats.branch_mispredictions += 1
-            stats.instructions -= 2
+            stats.stalls_control_hazards += 2
+            # stats.instructions -= 2
         stats.control_ins += 1
     else:
         isBranch = 0
@@ -1108,15 +1122,16 @@ def execute_p():
     EX_MEM_buff.RFWrite = bufferInfo["RFWrite"]
     EX_MEM_buff.isStall = False
 
+    stats.instructions += 1
 
 # perform the memory operation
 def mem_np():
     global stats, data_MEM, MemOp, ALUResult, Mem_b_h_w, loadData, op2
 
-    if (MemOp == "r"):
-        if (Mem_b_h_w == "b"):
+    if (MemOp == 1):
+        if (Mem_b_h_w == 0):
             loadData = read_byte(ALUResult, data_MEM)
-        elif (Mem_b_h_w == "h"):
+        elif (Mem_b_h_w == 1):
             loadData = read_half_word(ALUResult, data_MEM)
         else:
             loadData = read_word(ALUResult, data_MEM)
@@ -1124,10 +1139,10 @@ def mem_np():
 
         stats.data_transfers += 1
 
-    elif (MemOp == "w"):
-        if (Mem_b_h_w == "b"):
+    elif (MemOp == 2):
+        if (Mem_b_h_w == 0):
             write_byte(data_MEM, ALUResult, op2)
-        elif (Mem_b_h_w == "h"):
+        elif (Mem_b_h_w == 1):
             write_half_word(data_MEM, ALUResult, op2)
         else:
             write_word(data_MEM, ALUResult, op2)
@@ -1155,17 +1170,17 @@ def mem_p():
     
     if (knob2):
         
-        if (bufferInfo["MemOp"] == 'w' and MEM_WB_buff.RFWrite and MEM_WB_buff.rd == bufferInfo["rd"]):
-            if (MEM_WB_buff.MemOp == 'r'):
+        if (bufferInfo["MemOp"] == 2 and MEM_WB_buff.RFWrite and MEM_WB_buff.rd == bufferInfo["rd"]):
+            if (MEM_WB_buff.MemOp == 1):
                 bufferInfo["op2"] = MEM_WB_buff.loadData
             else:
                 bufferInfo["op2"] = MEM_WB_buff.ALUResult
             stats.data_hazards += 1
     
-    if (bufferInfo["MemOp"] == "r"):
-        if (bufferInfo["Mem_b_h_w"] == "b"):
+    if (bufferInfo["MemOp"] == 1):
+        if (bufferInfo["Mem_b_h_w"] == 0):
             loadData = read_byte(bufferInfo["ALUResult"], data_MEM)
-        elif (bufferInfo["Mem_b_h_w"] == "h"):
+        elif (bufferInfo["Mem_b_h_w"] == 1):
             loadData = read_half_word(bufferInfo["ALUResult"], data_MEM)
         else:
             loadData = read_word(bufferInfo["ALUResult"], data_MEM)
@@ -1173,10 +1188,10 @@ def mem_p():
 
         stats.data_transfers += 1
 
-    elif (bufferInfo["MemOp"] == "w"):
-        if (bufferInfo["Mem_b_h_w"] == "b"):
+    elif (bufferInfo["MemOp"] == 2):
+        if (bufferInfo["Mem_b_h_w"] == 0):
             write_byte(data_MEM, bufferInfo["ALUResult"], bufferInfo["op2"])
-        elif (bufferInfo["Mem_b_h_w"] == "h"):
+        elif (bufferInfo["Mem_b_h_w"] == 1):
             write_half_word(data_MEM, bufferInfo["ALUResult"], bufferInfo["op2"])
         else:
             write_word(data_MEM, bufferInfo["ALUResult"], bufferInfo["op2"])
